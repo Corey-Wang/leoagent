@@ -1,0 +1,46 @@
+[package]
+name = "leoagent-server"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "LeoAgent server: drive Codex / ACP coding agents on your Mac from your phone"
+publish = false
+
+[[bin]]
+name = "leoagent-server"
+path = "src/main.rs"
+
+[features]
+default = []
+# Experimental: attach to the running Codex desktop app over its local IPC socket
+# (undocumented / reverse-engineered protocol; may break with any desktop update). Off by default.
+desktop-sync = []
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+chrono = "0.4"
+regex = "1"
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+uuid = { version = "1", features = ["v4"] }
+libc = "0.2"
+bytes = "1"
+flate2 = "1"
+mime_guess = "2"
+parking_lot = "0.12"
+dashmap = "6"
+zstd = "0.13"
+urlencoding = "2"
+tokio-stream = "0.1"
+toml = "0.8"
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true

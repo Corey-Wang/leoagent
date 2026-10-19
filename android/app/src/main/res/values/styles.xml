@@ -1,0 +1,12 @@
+<resources>
+<style name="AppTheme" parent="Theme.Material3.DayNight.NoActionBar">
+  <item name="colorPrimary">@color/primary</item><item name="colorOnPrimary">#FFFFFF</item>
+  <item name="colorPrimaryContainer">@color/primaryC</item><item name="colorSecondaryContainer">@color/primaryC</item>
+  <item name="colorSurface">@color/surface</item><item name="android:colorBackground">@color/bg</item>
+  <item name="colorOnSurface">@color/text</item><item name="android:statusBarColor">@color/bg</item><item name="android:navigationBarColor">@color/bar</item>
+  <item name="android:windowLightStatusBar">@bool/lightBars</item><item name="android:windowLightNavigationBar">@bool/lightBars</item>
+</style>
+<style name="AppTheme.Sub" parent="AppTheme"/>
+<style name="NavLabel" parent="TextAppearance.Material3.LabelSmall"><item name="android:textSize">10sp</item><item name="android:fontFamily">sans-serif-medium</item><item name="android:letterSpacing">0.01</item></style>
+<bool name="lightBars">true</bool>
+</resources>

@@ -1,0 +1,63 @@
+LeoAgent
+Copyright 2026 The LeoAgent Authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+-------------------------------------------------------------------------------
+Third-party software bundled in builds
+-------------------------------------------------------------------------------
+
+Android app (android/)
+  * AndroidX (core, appcompat, swiperefreshlayout) ........ Apache-2.0
+  * Material Components for Android ........................ Apache-2.0
+  * OkHttp / Okio .......................................... Apache-2.0
+  * Markwon (core, ext-strikethrough, ext-tasklist, ext-latex,
+    inline-parser, image, linkify) ......................... Apache-2.0
+  * commonmark-java (via Markwon) .......................... BSD-2-Clause
+  * JLaTeXMath (via markwon ext-latex, ru.noties:jlatexmath-android)
+      GPL-2.0-or-later WITH Classpath-exception-2.0
+      LaTeX rendering in chat messages uses JLaTeXMath. It is used unmodified as a
+      separate library under the GPL "Classpath exception", which permits linking it
+      into an application distributed under other terms. If you modify JLaTeXMath
+      itself, those modifications fall under its GPL license.
+      Source: https://github.com/opencollab/jlatexmath , https://github.com/noties/jlatexmath-android
+
+Server (server/) — Rust crates fetched by Cargo, notably:
+  * axum, tokio, hyper, serde, serde_json, toml, chrono, regex, uuid, parking_lot,
+    dashmap, flate2, bytes, urlencoding, mime_guess, hmac, sha2, hex .. MIT OR Apache-2.0
+  * qrcode ................................................. MIT OR Apache-2.0
+  * rusqlite (MIT) with bundled SQLite (public domain)
+  * zstd (MIT) / zstd C library (BSD-3-Clause)
+  Run `cargo license` or `cargo about` in server/ for the complete list.
+
+Speech-to-text (stt/, optional)
+  * sherpa-onnx (k2-fsa) ................................... Apache-2.0
+  * numpy .................................................. BSD-3-Clause
+  * ffmpeg is invoked as an external program (LGPL/GPL, installed separately by the user)
+
+-------------------------------------------------------------------------------
+Models (NOT included in this repository)
+-------------------------------------------------------------------------------
+stt/download-models.sh downloads the following pre-converted models from the
+sherpa-onnx releases page. They are not redistributed by this project and are
+governed by their own licenses — review them before use or redistribution:
+
+  * sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09
+      Based on SenseVoice-Small (FunAudioLLM / Alibaba) — FunAudioLLM model license
+      (https://github.com/FunAudioLLM/SenseVoice , MODEL_LICENSE), and the
+      ASLP-lab WSYue-ASR fine-tune (https://huggingface.co/ASLP-lab/WSYue-ASR).
+  * sherpa-onnx-streaming-paraformer-bilingual-zh-en
+      Paraformer (FunASR / Alibaba DAMO) — FunASR model license
+      (https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE).
+  * silero_vad.onnx — Silero VAD, MIT (https://github.com/snakers4/silero-vad).
+
+-------------------------------------------------------------------------------
+Trademarks / interoperability
+-------------------------------------------------------------------------------
+Codex, ChatGPT, Claude, Gemini and other product names are trademarks of their
+respective owners. LeoAgent is an independent project and is not affiliated with
+or endorsed by them. It talks to agents through the public Agent Client Protocol
+(ACP) adapters you install yourself (e.g. codex-acp, claude-agent-acp).
+
+The optional, off-by-default "desktop-sync" feature talks to the Codex desktop
+app over an undocumented local IPC socket. See docs/desktop-sync.md.

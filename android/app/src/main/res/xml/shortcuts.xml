@@ -1,0 +1,4 @@
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+<shortcut android:shortcutId="agent" android:enabled="true" android:shortcutShortLabel="@string/sc_agent" android:icon="@android:drawable/ic_menu_edit">
+<intent android:action="android.intent.action.VIEW" android:targetPackage="io.leoagent.app" android:targetClass="io.leoagent.app.MainActivity"><extra android:name="tab" android:value="agent"/></intent>
+</shortcut></shortcuts>

@@ -1,0 +1,42 @@
+# build outputs
+/server/target/
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/.kotlin/
+/android/local.properties
+/android/.idea/
+*.iml
+# never commit: binaries, packages, signing material
+*.apk
+*.aab
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+# runtime data / secrets
+config.toml
+!deploy/config.example.toml
+.token
+*.db
+*.db-shm
+*.db-wal
+*.log
+logs/
+applogs/
+# speech models (downloaded by stt/download-models.sh)
+/stt/models/
+/stt/venv/
+*.onnx
+# junk
+*.bak
+*.bak-*
+*.orig
+*.tgz
+*.zip
+__pycache__/
+.DS_Store
+shots*/
+*.png
+!docs/img/*.png

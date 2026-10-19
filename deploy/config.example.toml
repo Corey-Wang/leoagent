@@ -1,0 +1,9 @@
+# ~/.config/leoagent/config.toml — `leoagent-server init` creates this file with a random token.
+listen = "127.0.0.1:8737"          # keep on localhost; expose via a TLS tunnel / reverse proxy
+token = ""                          # generated on first run; rotate with `leoagent-server rotate-token`
+public_url = ""                     # e.g. "https://agent.example.com" — used for the pairing QR code
+data_dir = "~/.local/share/leoagent" # bridge.db, sandbox project, uploaded app logs, published APK
+projects = []                       # e.g. ["~/code/my-app"] — registered on first start
+stt_url = ""                        # e.g. "http://127.0.0.1:8791" to enable voice input (stt/stt.py)
+desktop_sync = false                # EXPERIMENTAL, needs a build with --features desktop-sync (see docs/desktop-sync.md)
+helpers_dir = ""                    # default <data_dir>/bin (frontwin helper for app-window screenshots)

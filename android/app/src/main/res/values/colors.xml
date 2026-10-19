@@ -1,0 +1,9 @@
+<resources>
+<!-- 阿福式: 薰衣草雾面底 + 白色悬浮卡片 + 靛紫主色 -->
+<color name="bg">#F4F4FB</color><color name="surface">#FFFFFF</color><color name="surface2">#EEEEF8</color><color name="border">#E2E3F0</color>
+<color name="text">#1D1F3A</color><color name="muted">#8A8CA6</color><color name="primary">#5B5CF0</color><color name="primaryC">#ECECFF</color>
+<color name="up">#F0443A</color><color name="down">#22B573</color><color name="strong">#F0443A</color><color name="strongC">#FFEDEC</color>
+<color name="weak">#F59E2B</color><color name="weakC">#FFF4E3</color><color name="info">#8A8CA6</color><color name="infoC">#F0F0F8</color>
+<color name="purple">#8B5CF6</color><color name="bar">#F2FFFFFF</color>
+<color name="glowA">#E3E3FF</color><color name="glowB">#F7EEFF</color><color name="primary2">#7B8CFF</color>
+</resources>
