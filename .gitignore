@@ -40,3 +40,5 @@ __pycache__/
 shots*/
 *.png
 !docs/img/*.png
+!docs/icon.png
+!android/app/src/main/res/**/*.png

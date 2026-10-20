@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/icon.png" width="128" alt="LeoAgent logo"></p>
+
 # LeoAgent
 
 在手机上驱动你电脑上的 Codex 等编程 Agent —— 原生 Android App + 一个 Rust 单文件服务端。
