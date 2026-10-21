@@ -8,7 +8,9 @@ LeoAgent 由两部分组成：**部署在用户电脑上的 Rust 常驻服务**�
 
 项目以电脑长期在线、未休眠为使用前提；不负责远程开机或唤醒。当前主要面向 **macOS + Android**，电脑端暂时没有独立图形界面，也不依赖项目自建的中心云服务。
 
-当前处于面向 1.0 的本地迭代与验收阶段，暂不发版；已完成一次用户授权的 macOS + Codex 最小真实任务，以及 Android 丢响应、进程重启和多设备审批失效验证。锁屏/切网、更多机型、安装升级回滚、远端 CI 和正式发行仍待完成。1.0 的当前功能与剩余门槛见[验收记录](docs/1.0-readiness.md)。支持范围和验收要求见[技术方案](docs/technical-plan.md)，具体证据见[实施记录](docs/implementation-status.md)。
+当前提供 0.x 预发布，仍在面向 1.0 迭代与验收。已完成一次用户授权的 macOS + Codex 最小真实任务，以及 Android 丢响应、进程重启和多设备审批失效验证。锁屏/切网、更多机型、安装升级回滚和远端 CI 仍需补齐验证。1.0 的当前功能与剩余门槛见[验收记录](docs/1.0-readiness.md)。支持范围和验收要求见[技术方案](docs/technical-plan.md)，具体证据见[实施记录](docs/implementation-status.md)。
+
+预编译下载：[电脑端 0.1.2（macOS Apple Silicon）](https://github.com/Corey-Wang/leoagent/releases/tag/server-v0.1.2) · [Android 0.1.4（versionCode 5）](https://github.com/Corey-Wang/leoagent/releases/tag/android-v0.1.4)。安装前核对发行页的 `SHA256SUMS`；版本、签名和支持范围见[发布说明](docs/releases.md)。
 
 *English summary below.*
 
