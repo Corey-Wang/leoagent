@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LeoAgent persisted event envelope",
+  "description": "seq is global within data_epoch; data shape depends on type. Unknown types must be retained or ignored without reordering. SSE status is a separate snapshot hint.",
+  "type": "object",
+  "required": [
+    "seq",
+    "type",
+    "data"
+  ],
+  "properties": {
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "type": {
+      "type": "string"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "ts": {
+      "type": "number"
+    },
+    "task_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

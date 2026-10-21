@@ -6,6 +6,6 @@
 * **Tailscale** — keep `listen = "127.0.0.1:8737"` and use `tailscale serve --https=443 http://127.0.0.1:8737`, or bind to the tailnet IP.
 * A reverse proxy (Caddy / nginx) with HTTPS.
 
-Then set `public_url` in the config to the HTTPS URL and run `leoagent-server pair`. Server-Sent Events are used for live streaming, so disable response buffering in your proxy (`X-Accel-Buffering: no` is already sent).
+Then set `public_url` in the config to the HTTPS URL and run `leoagent-server pair`. The QR/link is a five-minute one-time invitation; the computer prints a verification code and must confirm it before the phone receives a device credential. Server-Sent Events are used for live streaming, so disable response buffering in your proxy (`X-Accel-Buffering: no` is already sent).
 
-The token grants full control of coding agents on your machine (they can run commands in your projects). Treat it like an SSH key; rotate with `leoagent-server rotate-token`.
+The device credential grants full control of coding agents on your machine. Treat it like an SSH key. List and revoke devices with `leoagent-server devices` and `leoagent-server revoke <device-id>`. Do not put credentials in browser URLs.

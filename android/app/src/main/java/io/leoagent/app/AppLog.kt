@@ -33,7 +33,7 @@ object AppLog {
             } catch (_: Throwable) {}
             prev?.uncaughtException(t, e)
         }
-        if (File(dir, "crash.flag").exists()) Thread { Thread.sleep(4000); upload(c, "上次崩溃自动上传", "crash") }.start()
+        // Crash evidence stays local. Upload only after the explicit action in Settings.
     }
 
     fun device(c: Context): String {
@@ -45,13 +45,20 @@ object AppLog {
     fun i(tag: String, msg: String) = w("I", tag, msg)
     fun e(tag: String, msg: String, t: Throwable? = null) = w("E", tag, if (t == null) msg else "$msg: ${t.javaClass.simpleName}: ${t.message}\n${android.util.Log.getStackTraceString(t).take(3000)}")
 
+    internal fun redact(text: String): String = text
+        .replace(Regex("\\b(?:la_|ld_)[a-zA-Z0-9_-]+"), "[credential]")
+        .replace(Regex("(?i)((?:x-token|token|poll_secret|code)\\s*[=:]\\s*[\"']?)[^\\s\"'&,}]+"), "$1[redacted]")
+        .replace(Regex("(?:https?://|leoagent://)[^\\s\"<>]+"), "[url]")
+        .replace(Regex("(?:/Users/|/home/)[^\\s\"<>]+"), "[local-path]")
+
     @Synchronized private fun w(lv: String, tag: String, msg: String) {
-        android.util.Log.println(if (lv == "E") android.util.Log.ERROR else android.util.Log.INFO, "leo/$tag", msg)
+        val safe = redact(msg)
+        android.util.Log.println(if (lv == "E") android.util.Log.ERROR else android.util.Log.INFO, "leo/$tag", safe)
         val d = dir ?: return
         try {
             val f = File(d, "app.log")
             if (f.length() > MAX) { File(d, "app.log.1").delete(); f.renameTo(File(d, "app.log.1")) }
-            File(d, "app.log").appendText("${fmt.format(Date())} $lv/$tag: $msg\n")
+            File(d, "app.log").appendText("${fmt.format(Date())} $lv/$tag: $safe\n")
         } catch (_: Exception) {}
     }
 
@@ -59,9 +66,8 @@ object AppLog {
         val bo = ByteArrayOutputStream()
         ZipOutputStream(bo).use { z ->
             fun put(n: String, b: ByteArray) { z.putNextEntry(ZipEntry(n)); z.write(b); z.closeEntry() }
-            put("info.txt", "${device(c)}\nnote=$note\ntime=${Date()}\nserver=${Prefs.url(c)}\n".toByteArray())
-            for (n in listOf("app.log.1", "app.log")) File(dir, n).takeIf { it.exists() }?.let { put(n, it.readBytes()) }
-            try { put("logcat.txt", Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "time", "-t", "3000")).inputStream.readBytes()) } catch (_: Exception) {}
+            put("info.txt", "${device(c)}\nnote=${redact(note)}\ntime=${Date()}\n".toByteArray())
+            for (n in listOf("app.log.1", "app.log")) File(dir, n).takeIf { it.exists() }?.let { put(n, redact(it.readText()).toByteArray()) }
         }
         return bo.toByteArray()
     }
@@ -74,13 +80,10 @@ object AppLog {
         return try {
             i("log", "upload kind=$kind")
             val b = zip(c, note)
-            val h = URL("${Prefs.url(c)}/api/app/logs").openConnection() as HttpURLConnection
-            h.connectTimeout = 15000; h.readTimeout = 60000; h.requestMethod = "POST"; h.doOutput = true
-            h.setRequestProperty("X-Token", Prefs.token(c)); h.setRequestProperty("Content-Type", "application/zip")
-            h.setRequestProperty("X-Note", URLEncoder.encode(note, "UTF-8")); h.setRequestProperty("X-Kind", kind)
-            h.setRequestProperty("X-App-Ver", device(c).substringAfter("app=").substringBefore(" "))
-            h.setFixedLengthStreamingMode(b.size); h.outputStream.use { it.write(b) }
-            val code = h.responseCode; h.disconnect()
+            val (code, _) = Http.call("${Prefs.url(c)}/api/app/logs", "POST",
+                mapOf("X-Token" to Prefs.token(c), "X-Note" to URLEncoder.encode(redact(note), "UTF-8"),
+                    "X-Kind" to kind, "X-App-Ver" to device(c).substringAfter("app=").substringBefore(" ")),
+                b, contentType = "application/zip", readTimeoutMs = 60000)
             if (code == 200) { File(dir, "crash.flag").delete(); i("log", "upload ok ${b.size}B"); null }
             else { e("log", "upload HTTP $code"); "HTTP $code" }
         } catch (x: Exception) { e("log", "upload failed", x); "${x.javaClass.simpleName}: ${x.message}" }

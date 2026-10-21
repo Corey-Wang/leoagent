@@ -32,8 +32,13 @@ class MdView(c: Context) : LinearLayout(c) {
     data class Block(val type: Int, val src: String, val lang: String = "")
     companion object {
         const val TEXT = 0; const val CODE = 1; const val TABLE = 2
-        @Volatile private var mw: Markwon? = null
-        fun markwon(c: Context): Markwon = mw ?: synchronized(this) { mw ?: build(c.applicationContext).also { mw = it } }
+        private fun nightMode(c: Context) = c.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
+        private val renderers = HashMap<Int, Markwon>()
+        fun markwon(c: Context): Markwon = synchronized(renderers) {
+            renderers.getOrPut(nightMode(c)) {
+                build(c.applicationContext.createConfigurationContext(c.resources.configuration))
+            }
+        }
         private fun build(c: Context): Markwon {
             val ts = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 16f, c.resources.displayMetrics)
             return Markwon.builder(c)
@@ -51,15 +56,16 @@ class MdView(c: Context) : LinearLayout(c) {
                             .bulletWidth((ts / 3).toInt()).headingTextSizeMultipliers(floatArrayOf(1.5f, 1.3f, 1.15f, 1.05f, 1f, 0.9f)) }
                 }).build()
         }
-        private val cache = object : java.util.LinkedHashMap<String, Spanned>(256, 0.75f, true) { override fun removeEldestEntry(e: MutableMap.MutableEntry<String, Spanned>?) = size > 300 }
+        private val cache = object : java.util.LinkedHashMap<Pair<Int, String>, Spanned>(256, 0.75f, true) { override fun removeEldestEntry(e: MutableMap.MutableEntry<Pair<Int, String>, Spanned>?) = size > 300 }
         fun text(c: Context, src: String): Spanned {
-            synchronized(cache) { cache[src] }?.let { return it }
+            val key = nightMode(c) to src
+            synchronized(cache) { cache[key] }?.let { return it }
             val sp = SpannableStringBuilder(markwon(c).toMarkdown(src))
             val col = UI.col(c, R.color.primary)
             for (cs in sp.getSpans(0, sp.length, CodeSpan::class.java)) { val s = sp.getSpanStart(cs); val e = sp.getSpanEnd(cs); val t = sp.substring(s, e)
                 if (Md.isPathLike(t)) sp.setSpan(LinkSpan(t.trim(), col), s, e, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
             Md.linkify(c, sp)
-            if (src.length > 30) synchronized(cache) { cache[src] = sp }
+            if (src.length > 30) synchronized(cache) { cache[key] = sp }
             return sp
         }
         fun warm(c: Context, src: String) { for (b in split(src)) if (b.type == TEXT && b.src.length > 30) text(c, b.src) }
@@ -134,7 +140,7 @@ class MdView(c: Context) : LinearLayout(c) {
     private fun create(b: Block): View = when (b.type) {
         TEXT -> tv().apply { setLineSpacing(0f, 1.25f) }
         CODE -> LinearLayout(context).apply { orientation = VERTICAL
-            background = GradientDrawable().apply { setColor(0xFFF6F7FB.toInt()); cornerRadius = dp(12).toFloat(); setStroke(dp(1).coerceAtLeast(1), UI.col(context, R.color.border)) }
+            background = GradientDrawable().apply { setColor(UI.col(context, R.color.md_code_background)); cornerRadius = dp(12).toFloat(); setStroke(dp(1).coerceAtLeast(1), UI.col(context, R.color.border)) }
             val head = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(6), dp(6), 0) }
             head.addView(UI.text(context, "", 12f, R.color.muted).apply { tag = "lang" }, LayoutParams(0, WRAP_CONTENT, 1f))
             head.addView(UI.text(context, "复制", 12f, R.color.primary).apply { setPadding(dp(10), dp(4), dp(10), dp(4))
@@ -166,7 +172,7 @@ class MdView(c: Context) : LinearLayout(c) {
             for (ci in 0 until n) { val head = ri == 0
                 val cell = tv(14f).apply { setPadding(dp(10), dp(7), dp(10), dp(7)); minWidth = dp(56); maxWidth = dp(260)
                     gravity = (al.getOrNull(ci) ?: Gravity.START) or Gravity.CENTER_VERTICAL
-                    background = GradientDrawable().apply { setColor(if (head) UI.col(context, R.color.surface2) else if (ri % 2 == 0) 0xFFFAFAFE.toInt() else UI.col(context, R.color.surface)); setStroke(1, border) }
+                    background = GradientDrawable().apply { setColor(UI.col(context, if (head) R.color.surface2 else if (ri % 2 == 0) R.color.md_table_stripe else R.color.surface)); setStroke(1, border) }
                     val sp = text(context, cs.getOrNull(ci) ?: ""); mw.setParsedMarkdown(this, sp); if (head) setTypeface(typeface, Typeface.BOLD) }
                 tr.addView(cell, TableRow.LayoutParams(WRAP_CONTENT, MATCH_PARENT)) }
             t.addView(tr)

@@ -3,7 +3,11 @@ val vp = Properties().apply { rootProject.file("version.properties").inputStream
 plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
 android {
     namespace = "io.leoagent.app"; compileSdk = 34
-    defaultConfig { applicationId = "io.leoagent.app"; minSdk = 26; targetSdk = 34; versionCode = vp.getProperty("versionCode").toInt(); versionName = vp.getProperty("versionName") }
+    defaultConfig {
+        applicationId = "io.leoagent.app"; minSdk = 26; targetSdk = 34
+        versionCode = vp.getProperty("versionCode").toInt(); versionName = vp.getProperty("versionName")
+        testInstrumentationRunner = "io.leoagent.app.SecurityInstrumentation"
+    }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
     // Release signing: put a keystore OUTSIDE the repo and point to it via ~/.gradle/gradle.properties
@@ -13,7 +17,10 @@ android {
         storeFile = file(sf); storePassword = project.property("leoagent.storePassword") as String
         keyAlias = project.property("leoagent.keyAlias") as String; keyPassword = project.property("leoagent.keyPassword") as String
     }
-    buildTypes { getByName("release") { isMinifyEnabled = false; if (sf != null) signingConfig = signingConfigs.getByName("release") } }
+    buildTypes {
+        getByName("debug") { if (project.hasProperty("leoagent.verification")) applicationIdSuffix = ".verification" }
+        getByName("release") { isMinifyEnabled = false; if (sf != null) signingConfig = signingConfigs.getByName("release") }
+    }
 }
 dependencies {
     implementation("androidx.core:core-ktx:1.12.0")

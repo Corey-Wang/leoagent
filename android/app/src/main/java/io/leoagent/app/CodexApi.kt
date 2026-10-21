@@ -6,7 +6,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 object CxPrefs {
-    private fun sp(c: Context) = c.getSharedPreferences("codex", Context.MODE_PRIVATE)
+    private fun sp(c: Context) = c.getSharedPreferences("codex_" + SecureStore.digest(Prefs.url(c)), Context.MODE_PRIVATE)
     fun base(c: Context) = Prefs.url(c) + "/api"
     fun token(c: Context) = Prefs.token(c)
     fun setToken(c: Context, v: String) = Prefs.setToken(c, v)
@@ -29,16 +29,38 @@ object CxPrefs {
     fun setAgentFilter(c: Context, v: Boolean) = sp(c).edit().putBoolean("agent_filter", v).apply()
     fun noteLast(c: Context) = sp(c).getInt("note_last", 0)
     fun setNoteLast(c: Context, v: Int) = sp(c).edit().putInt("note_last", v).apply()
+    fun dataEpoch(c: Context) = sp(c).getString("data_epoch", "") ?: ""
+    fun serverGeneration(c: Context) = sp(c).getString("server_generation", "") ?: ""
+    fun setServerIdentity(c: Context, epoch: String, generation: String = "") =
+        sp(c).edit().putString("data_epoch", epoch).putString("server_generation", generation).apply()
 }
 
 object Cx {
-    fun req(c: Context, method: String, path: String, body: JSONObject? = null, readTimeout: Int = 20000): Pair<Int, String> = try {
-        val hd = mutableMapOf("X-Token" to CxPrefs.token(c), "User-Agent" to "leoagent-android")
+    data class Connection(val base: String, val token: String) {
+        fun isCurrent(c: Context) = this == connection(c)
+    }
+    fun connection(c: Context) = Connection(Prefs.url(c), Prefs.token(c))
+    fun req(c: Context, method: String, path: String, body: JSONObject? = null, readTimeout: Int = 20000,
+            operationId: String? = null, v1: Boolean = false, connection: Connection = connection(c)): Pair<Int, String> = try {
+        val hd = mutableMapOf("X-Token" to connection.token, "User-Agent" to "leoagent-android")
+        if (v1) {
+            hd["Accept"] = "application/json"
+            hd["X-Data-Epoch"] = CxPrefs.dataEpoch(c)
+            operationId?.let { hd["Idempotency-Key"] = it }
+        }
         if (method == "PATCH") hd["X-HTTP-Method-Override"] = "PATCH"
         val m = if (method == "PATCH") "POST" else method
-        val (code, s) = Http.call(CxPrefs.base(c) + path, m, hd, body?.toString()?.toByteArray(), readTimeoutMs = readTimeout)
-        if (code >= 400) AppLog.e("codex", "$method $path -> $code ${s.take(300)}")
+        val (code, s) = Http.call(connection.base + "/api" + (if (v1) "/v1" else "") + path, m, hd, body?.toString()?.toByteArray(), readTimeoutMs = readTimeout)
+        if (code >= 400) AppLog.e("codex", "$method ${path.substringBefore('?')} -> $code")
         Pair(code, s)  // 共享 OkHttp 连接池 (HTTP/2 keep-alive)
     } catch (e: Exception) { AppLog.e("codex", "$method $path failed: ${e.javaClass.simpleName}: ${e.message}"); Pair(0, e.message ?: "网络错误") }
     fun err(r: Pair<Int, String>) = try { JSONObject(r.second).optString("error", "HTTP ${r.first}") } catch (_: Exception) { if (r.first == 0) r.second else "HTTP ${r.first}" }
+    fun syncIdentity(c: Context): Pair<Int, String> {
+        val r=req(c,"GET","/health")
+        if(r.first==200) try {
+            val o=JSONObject(r.second)
+            CxPrefs.setServerIdentity(c,o.optString("data_epoch"),o.optString("server_generation"))
+        }catch(_:Exception){}
+        return r
+    }
 }

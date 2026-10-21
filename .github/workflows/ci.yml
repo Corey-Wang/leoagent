@@ -1,0 +1,57 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  server:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Install tested Rust toolchain
+        run: rustup toolchain install 1.92.0 --profile minimal --component rustfmt --component clippy
+      - name: New storage and security module formatting
+        run: rustup run 1.92.0 rustfmt --check --edition 2021 server/src/tasks.rs server/src/security.rs server/src/instance.rs server/src/diagnostics.rs server/src/maintenance.rs server/src/notes.rs
+      - name: Unit tests and experimental feature build
+        run: |
+          cargo +1.92.0 test --locked --manifest-path server/Cargo.toml
+          cargo +1.92.0 check --locked --all-features --manifest-path server/Cargo.toml
+          cargo +1.92.0 clippy --locked --manifest-path server/Cargo.toml
+          cargo +1.92.0 build --locked --manifest-path server/Cargo.toml
+      - name: Isolated HTTP and ACP behavior
+        run: |
+          python3 -m venv "$RUNNER_TEMP/leoagent-tests"
+          "$RUNNER_TEMP/leoagent-tests/bin/python" -m pip install -r tests/requirements.txt
+          LEOAGENT_CONTRACTS=1 "$RUNNER_TEMP/leoagent-tests/bin/python" tests/integration.py
+          LEOAGENT_CONTRACTS=1 "$RUNNER_TEMP/leoagent-tests/bin/python" tests/security.py
+          "$RUNNER_TEMP/leoagent-tests/bin/python" tests/notifications.py
+          git diff --check
+      - name: macOS binary archive and staged installation
+        if: runner.os == 'macOS'
+        run: |
+          bash deploy/package-release.sh "$RUNNER_TEMP/leoagent-dist"
+          python3 tests/install_package.py "$RUNNER_TEMP/leoagent-dist/leoagent-server-darwin-$(uname -m).tar.gz"
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Android SDK
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0"
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > android/local.properties
+      - name: Compile application and isolated instrumentation
+        working-directory: android
+        run: ./gradlew -Pleoagent.verification :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug

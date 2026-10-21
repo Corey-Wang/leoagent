@@ -6,6 +6,8 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
+import android.graphics.drawable.StateListDrawable
+import android.graphics.drawable.ColorDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
@@ -41,6 +43,15 @@ object UI {
     fun grad(c: Context, r: Int) = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(col(c, R.color.primary), col(c, R.color.primary2))).apply { cornerRadius = dp(c, r).toFloat() }
     fun lift(v: View) { v.elevation = dp(v.context, 2).toFloat(); if (android.os.Build.VERSION.SDK_INT >= 28) { v.outlineSpotShadowColor = 0x405B5CF0; v.outlineAmbientShadowColor = 0x205B5CF0 } }
     fun ripple(c: Context, bg: Int, r: Int) = RippleDrawable(ColorStateList.valueOf(0x22808080), round(c, bg, r), round(c, Color.WHITE, r))
+    /** Keyboard focus feedback. Non-editable actions must not take touch focus: it consumes the first tap. */
+    fun focusForeground(c: Context, r: Int) = StateListDrawable().apply {
+        addState(intArrayOf(android.R.attr.state_focused), GradientDrawable().apply {
+            cornerRadius = dp(c, r).toFloat()
+            setColor(Color.TRANSPARENT)
+            setStroke(maxOf(dp(c, 2), 2), col(c, R.color.primary))
+        })
+        addState(intArrayOf(), ColorDrawable(Color.TRANSPARENT))
+    }
     fun lp(c: Context, l: Int = 16, t: Int = 0, r: Int = 16, b: Int = 0) = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { setMargins(dp(c, l), dp(c, t), dp(c, r), dp(c, b)) }
 
     fun text(c: Context, s: CharSequence, size: Float = 15f, color: Int = R.color.text, bold: Boolean = false) = TextView(c).apply {
@@ -91,14 +102,23 @@ object UI {
         if (value != null) r.addView(mono(c, value, 17f, valueColor, false).apply { gravity = Gravity.END; setPadding(dp(c, DS.S3), 0, 0, 0); maxWidth = dp(c, 220); maxLines = 2 })
         if (onClick != null) {
             r.addView(android.widget.ImageView(c).apply { setImageResource(R.drawable.ms_chevron_right); rotation = 0f; imageTintList = ColorStateList.valueOf(col(c, R.color.muted)); alpha = 0.6f }, LinearLayout.LayoutParams(dp(c, 18), dp(c, 18)).apply { leftMargin = dp(c, DS.S2) })
-            r.background = RippleDrawable(ColorStateList.valueOf(0x22808080), null, null); r.setOnClickListener { onClick() }
+            r.background = RippleDrawable(ColorStateList.valueOf(0x22808080), null, null)
+            r.foreground = focusForeground(c, DS.R_SM)
+            r.isFocusable = true
+            r.isFocusableInTouchMode = false
+            r.setOnClickListener { onClick() }
         }
         g.addView(r); return r
     }
     /** 按钮行: 蓝色文字, iOS 列表内操作 */
     fun action(c: Context, g: LinearLayout, title: String, color: Int = R.color.primary, onClick: () -> Unit) =
         row(c, g, title, titleColor = color, onClick = null).apply {
-            background = RippleDrawable(ColorStateList.valueOf(0x22808080), null, null); setOnClickListener { onClick() }
+            background = RippleDrawable(ColorStateList.valueOf(0x22808080), null, null)
+            foreground = focusForeground(c, DS.R_SM)
+            isFocusable = true
+            isFocusableInTouchMode = false
+            contentDescription = title
+            setOnClickListener { onClick() }
         }
     fun chip(c: Context, s: String, fg: Int, bg: Int) = TextView(c).apply {
         text = s; textSize = 12f; setTextColor(fg); typeface = MED; setPadding(dp(c, DS.S2 + 2), dp(c, DS.S1), dp(c, DS.S2 + 2), dp(c, DS.S1)); fontFeatureSettings = "tnum"
@@ -110,12 +130,22 @@ object UI {
     }
     fun filledButton(c: Context, s: String, bg: Int = R.color.primary, fg: Int = android.R.color.white, onClick: () -> Unit) = TextView(c).apply {
         text = s; textSize = 17f; typeface = MED; gravity = Gravity.CENTER; setTextColor(col(c, fg)); minHeight = dp(c, DS.BTN)
-        background = if (bg == R.color.primary) RippleDrawable(ColorStateList.valueOf(0x33FFFFFF), grad(c, DS.R_PILL), null) else ripple(c, col(c, bg), DS.R_PILL); setOnClickListener { onClick() }; isClickable = true
+        background = if (bg == R.color.primary) RippleDrawable(ColorStateList.valueOf(0x33FFFFFF), grad(c, DS.R_PILL), null) else ripple(c, col(c, bg), DS.R_PILL)
+        foreground = focusForeground(c, DS.R_PILL)
+        isClickable = true
+        isFocusable = true
+        isFocusableInTouchMode = false
+        contentDescription = s
+        setOnClickListener { onClick() }
     }
     /** Material Symbols Rounded 图标按钮 (44dp 触控区) */
     fun icon(c: Context, res: Int, tint: Int = R.color.text, size: Int = 24) = android.widget.ImageView(c).apply {
         setImageResource(res); imageTintList = ColorStateList.valueOf(col(c, tint)); scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
-        val p = dp(c, (DS.TOUCH - size) / 2); setPadding(p, p, p, p) }
+        val p = dp(c, (DS.TOUCH - size) / 2); setPadding(p, p, p, p)
+        minimumWidth = dp(c, DS.TOUCH); minimumHeight = dp(c, DS.TOUCH)
+        isFocusable = true; isFocusableInTouchMode = false
+        foreground = focusForeground(c, DS.R_SM)
+    }
     /** 在 TextView 中央叠加图标 (保留原 TextView 类型与点击逻辑) */
     fun glyph(c: Context, tv: TextView, res: Int, tint: Int, bg: android.graphics.drawable.Drawable?, size: Int = 22) {
         val ic = c.getDrawable(res)!!.mutate().apply { setTint(tint) }

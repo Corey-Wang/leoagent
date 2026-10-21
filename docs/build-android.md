@@ -24,4 +24,16 @@ then `./gradlew assembleRelease`. In-app updates require every APK to be signed 
 
 ## Publishing updates to your phone
 
-Bump `android/version.properties`, build, then `deploy/publish-apk.sh app/build/outputs/apk/debug/app-debug.apk "notes"`. The app checks `/api/app/version` on start (设置 → 检查更新).
+Bump `android/version.properties`, build with `./gradlew assembleRelease`, then run `../deploy/publish-apk.sh app/build/outputs/apk/release/app-release.apk "notes"` from `android/`. Verify the package ID, version and signing certificate against the previously published APK first. In-app upgrades require the same signing identity. The app checks `/api/app/version` on start (设置 → 检查更新).
+
+
+## 隔离 Android 验收
+
+只对明确的 Android 模拟器运行真实设备流程，不安装到物理手机。验证包使用独立的 `io.leoagent.app.verification` application ID：
+
+```bash
+./gradlew -Pleoagent.verification :app:assembleDebug :app:assembleDebugAndroidTest
+python3 ../tests/android_integration.py
+```
+
+脚本会拒绝安装正式包名，并验证 Markdown 日夜主题渲染与对比度、Keystore、篡改拒绝、旧明文凭据迁入加密存储、旧二维码填入与保存、一次性配对、任务提交和进程重启后的凭据恢复。

@@ -9,6 +9,7 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.text.InputType
 import android.text.SpannableStringBuilder
 import android.text.Spanned
@@ -29,8 +30,10 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
+import okhttp3.Call
+import okhttp3.Request
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /** Agent 标签页: Codex 对话 (由 MainActivity 托管) */
 class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act) {
@@ -58,12 +61,15 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
     private var cfgOpts = JSONArray()  // 当前非 Codex 会话的 configOptions
     private var session: JSONObject? = null
     private var sid: String? = null
-    private var lastSeq = 0
+    @Volatile private var lastSeq = 0L
     private var running = false
     @Volatile private var gen = 0
     private val tools = HashMap<String, Pair<LinearLayout, JSONObject>>()
     private val perms = LinkedHashMap<String, JSONObject>()
     private var permShown: String? = null
+    private var permDialog: BottomSheetDialog? = null
+    private val responseInFlight = HashSet<String>()
+    @Volatile private var streamCall: Call? = null
     private var curMsg: MdView? = null; private var curMsgSb = StringBuilder()
     private var curThought: TextView? = null; private var curThoughtSb = StringBuilder()
     private val thoughts = ArrayList<View>()
@@ -87,10 +93,20 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
         }
         if (shown < total) h.postDelayed(this, 16) else twOn = false
     } }
+    private fun motionEnabled(): Boolean = runCatching {
+        Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f
+    }.getOrDefault(true)
     private fun stick() { if (atBottom) scroll.post { scroll.scrollTo(0, maxOf(0, list.height - scroll.height)) } }
     private fun showTyping() {
         if (typing != null) return
         val t = UI.text(this, "●  ●  ●", 14f, R.color.muted).apply { setPadding(dp(4), dp(10), 0, dp(6)) }
+        if (!motionEnabled()) {
+            t.alpha = 0.7f
+            typing = t
+            list.addView(t)
+            stick()
+            return
+        }
         t.animate().alpha(0.25f).setDuration(600).withEndAction(object : Runnable { override fun run() { if (typing === t) t.animate().alpha(if (t.alpha < 0.5f) 1f else 0.25f).setDuration(600).withEndAction(this).start() } }).start()
         typing = t; list.addView(t); stick()
     }
@@ -98,6 +114,12 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
     private val images = ArrayList<Pair<String, String>>()
     private var atBottom = true
     private var unread = 0
+    private var taskId: String? = null
+    private var taskState: String = "idle"
+    private var deliveryUnknown = false
+    private var connectionMessage = ""
+    private lateinit var connectionTv: TextView
+    private lateinit var taskStatusTv: TextView
     private lateinit var fab: FrameLayout
     private lateinit var fabBadge: TextView
     private lateinit var pip: ScreenPip
@@ -134,6 +156,15 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
         bar.addView(iconBtn("±") { showDiff() })
         bar.addView(iconBtn("⋯") { moreMenu() })
         main.addView(bar)
+        connectionTv = UI.text(this, "", 12.5f, R.color.muted).apply {
+            gravity = Gravity.CENTER; setPadding(dp(12), dp(4), dp(12), dp(4)); visibility = View.GONE
+        }
+        taskStatusTv = UI.text(this, "", 13f, R.color.primary).apply {
+            gravity = Gravity.CENTER; setPadding(dp(12), dp(5), dp(12), dp(5)); visibility = View.GONE
+            setOnClickListener { if (taskState == "unknown") reviewUnknownTask() else if (deliveryUnknown) reviewPending() }
+        }
+        main.addView(connectionTv)
+        main.addView(taskStatusTv)
         main.addView(View(this).apply { setBackgroundColor(col(R.color.border)) }, LinearLayout.LayoutParams(MATCH_PARENT, 1))
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(10), dp(14), dp(24)) }
         scroll = ScrollView(this).apply { addView(list); isFillViewport = true
@@ -177,32 +208,88 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
     }
     fun back(): Boolean { if (drawer.isDrawerOpen(GravityCompat.START)) { drawer.closeDrawers(); return true }; return false }
     fun open(id: String) { drawer.closeDrawers(); if (id != sid) openSession(id) }
-    private var stopped = false
-    fun onShow() { Http.warm(CxPrefs.base(this) + "/agents", CxPrefs.token(this)); visibleSession = sid; pip.resume(); if (stopped) { stopped = false; if (sid != null) startStream() } }
-    fun onHide() { pip.pause(); visibleSession = null; gen++; stopped = true; if (running || perms.isNotEmpty()) CodexService.start(this) }
+    private var paneVisible = false
+    private var stopped = true
+    private var paneConnection = Cx.connection(this)
+    fun onShow() {
+        paneVisible = true
+        val currentConnection = Cx.connection(this)
+        val changed = paneConnection != currentConnection
+        if (changed) {
+            paneConnection = currentConnection; gen++; streamCall?.cancel()
+            memCache.clear(); responseInFlight.clear(); deliveryUnknown = false
+            stopped = false; refreshMeta(); openSession(CxPrefs.session(this))
+        }
+        Http.warm(CxPrefs.base(this) + "/agents", CxPrefs.token(this)); visibleSession = sid; pip.resume()
+        if (stopped) { stopped = false; if (sid != null) { if (session == null) openSession(sid) else startStream() } }
+    }
+    fun onHide() { paneVisible = false; pip.pause(); visibleSession = null; gen++; streamCall?.cancel(); stopped = true; if (running || perms.isNotEmpty()) CodexService.start(this) }
 
     // ───────── 组件 ─────────
     private val GLYPH = mapOf("☰" to R.drawable.ms_menu, "±" to R.drawable.ms_difference, "⋯" to R.drawable.ms_more_horiz, "✕" to R.drawable.ms_close,
         "＋" to R.drawable.ms_add, "↑" to R.drawable.ms_arrow_upward, "■" to R.drawable.ms_stop)
+    private val GLYPH_LABEL = mapOf(
+        "☰" to "打开对话列表",
+        "±" to "查看文件差异",
+        "⋯" to "更多操作",
+        "✕" to "关闭",
+        "＋" to "添加图片",
+        "↑" to "发送消息",
+        "■" to "停止任务",
+    )
     private fun iconBtn(s: String, f: () -> Unit) = TextView(this).apply {
         text = s; textSize = 22f; gravity = Gravity.CENTER; setTextColor(col(R.color.text)); layoutParams = LinearLayout.LayoutParams(dp(DS.TOUCH), dp(DS.TOUCH))
         GLYPH[s]?.let { UI.glyph(context, this, it, col(R.color.text), android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x22808080), null, UI.round(context, android.graphics.Color.WHITE, 22)), 24) } ?: run { background = UI.ripple(context, android.graphics.Color.TRANSPARENT, 22) }
+        contentDescription = GLYPH_LABEL[s] ?: s
+        isFocusable = true; isFocusableInTouchMode = false
+        foreground = UI.focusForeground(context, DS.R_SM)
         setOnClickListener { f() }
     }
     private fun circle(s: String, bgc: Int, fg: Int, f: () -> Unit) = TextView(this).apply {
         text = s; textSize = 20f; typeface = UI.BOLD; gravity = Gravity.CENTER; setTextColor(col(fg)); tag = intArrayOf(bgc, fg)
         GLYPH[s]?.let { UI.glyph(context, this, it, col(fg), if (bgc == R.color.primary) UI.grad(context, 20) else UI.card(context, 20), 22) } ?: run { background = UI.ripple(context, col(bgc), 20) }
+        contentDescription = GLYPH_LABEL[s] ?: s
+        isFocusable = true; isFocusableInTouchMode = false
+        foreground = UI.focusForeground(context, DS.R_SM)
         setOnClickListener { f() }
     }
     private fun setRunning(r: Boolean) {
-        running = r; UI.glyph(this, sendBtn, if (r) R.drawable.ms_stop else R.drawable.ms_arrow_upward, 0xFFFFFFFF.toInt(), UI.grad(this, 20), if (r) 20 else 22)
+        running = r
+        UI.glyph(this, sendBtn, if (r) R.drawable.ms_stop else R.drawable.ms_arrow_upward, 0xFFFFFFFF.toInt(), UI.grad(this, 20), if (r) 20 else 22)
+        sendBtn.contentDescription = if (r) "停止任务" else "发送消息"
+    }
+    private fun updateTaskStatus() {
+        if (!::taskStatusTv.isInitialized) return
+        taskStatusTv.text = if (deliveryUnknown) "提交结果尚未确认 · 点此核对" else when (taskState) {
+            "queued" -> "任务已接受，正在准备"
+            "running" -> "Agent 正在执行"
+            "waiting_approval" -> "等待你的审批"
+            "waiting_input" -> "等待你的回答"
+            "cancelling" -> "正在停止，等待 Agent 确认"
+            "recovering" -> "电脑正在核对任务状态"
+            "unknown" -> "本轮结果未知，项目保持占用 · 点此核对"
+            "interrupted" -> "本轮已人工核对并结束，已有改动仍保留"
+            "failed" -> "本轮执行失败"
+            "cancelled" -> "本轮已停止"
+            else -> ""
+        }
+        taskStatusTv.visibility = if (taskStatusTv.text.isEmpty()) View.GONE else View.VISIBLE
+    }
+    private fun setConnection(message: String) {
+        connectionMessage = message
+        connectionTv.text = message
+        connectionTv.visibility = if (message.isEmpty()) View.GONE else View.VISIBLE
     }
 
     // ───────── 元数据 / 抽屉 ─────────
-    private fun refreshMeta(): Unit = bg {
-        val p = Cx.req(this, "GET", "/projects"); val m = Cx.req(this, "GET", "/models"); val ag = Cx.req(this, "GET", "/agents")
-        if (ag.first == 200) JSONObject(ag.second).let { o -> runOnUiThread { agents = o.optJSONArray("agents") ?: JSONArray(); defAgent = o.optString("default", "codex"); if (sid == null && newAgent() != "codex") loadCfg() } }
+    private fun refreshMeta() {
+        if (!Prefs.configured(this)) return
+        val conn = Cx.connection(this)
+        bg {
+        val p = Cx.req(this, "GET", "/projects", connection = conn); val m = Cx.req(this, "GET", "/models", connection = conn); val ag = Cx.req(this, "GET", "/agents", connection = conn)
+        if (ag.first == 200) JSONObject(ag.second).let { o -> runOnUiThread { if (!conn.isCurrent(this)) return@runOnUiThread; agents = o.optJSONArray("agents") ?: JSONArray(); defAgent = o.optString("default", "codex"); if (sid == null && newAgent() != "codex") loadCfg() } }
         runOnUiThread {
+            if (!conn.isCurrent(this)) return@runOnUiThread
             if (p.first == 200) projects = JSONArray(p.second) else toast("连接失败：" + Cx.err(p))
             if (m.first == 200) JSONObject(m.second).let { models = it.optJSONArray("models") ?: JSONArray()
                 if (CxPrefs.model(this).isEmpty()) { val d = it.optString("default"); val mm = Regex("(.*)\\[(.*)]").find(d)
@@ -210,6 +297,7 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
             if (CxPrefs.project(this) < 0 && projects.length() > 0) CxPrefs.setProject(this, projects.getJSONObject(0).getInt("id"))
             updateTitle(); buildDrawer(); if (sid == null) { list.removeAllViews(); emptyState() }
         }
+    }
     }
     private fun projName(id: Int): String { for (i in 0 until projects.length()) projects.getJSONObject(i).let { if (it.getInt("id") == id) return it.getString("name") }; return "选择项目" }
     private fun buildDrawer() {
@@ -391,13 +479,17 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
     }
     fun settings() {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), 0) }
-        box.addView(UI.text(this, "Codex 口令（Token）", 13f, R.color.muted))
-        val e = EditText(this).apply { setText(CxPrefs.token(context)); textSize = 13f }; box.addView(e)
+        box.addView(UI.text(this, "设备凭据（加密保存）", 13f, R.color.muted))
+        val e = EditText(this).apply {
+            setText(CxPrefs.token(context)); textSize = 13f
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }; box.addView(e)
         val sw = Switch(this).apply { text = "新对话默认每条命令都审批"; isChecked = CxPrefs.mode(context) == "ask"; textSize = 15f; setPadding(0, dp(12), 0, 0) }; box.addView(sw)
         box.addView(UI.text(this, "关闭 = 在项目内自由运行（Codex 默认，只有高风险操作才会请求审批）", 12f, R.color.muted))
         box.addView(UI.text(this, "Agent 管理（启用 / 默认）  ›", 15f, R.color.primary).apply { setPadding(0, dp(16), 0, dp(4)); setOnClickListener { agentSettings() } })
         AlertDialog.Builder(this).setTitle("设置").setView(box).setPositiveButton("保存") { _, _ ->
-            CxPrefs.setToken(this, e.text.toString()); CxPrefs.setMode(this, if (sw.isChecked) "ask" else "auto"); refreshMeta()
+            if (!CxPrefs.setToken(this, e.text.toString())) { toast("无法加密保存设备凭据"); return@setPositiveButton }
+            CxPrefs.setMode(this, if (sw.isChecked) "ask" else "auto"); refreshMeta()
         }.setNegativeButton("取消", null).show()
     }
 
@@ -481,12 +573,14 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
     private fun newChat() { drawer.closeDrawers(); openSession(null) }
     private fun clearChat() {
         hideTyping(); h.removeCallbacks(tw); twOn = false; pendingEcho = null
-        list.removeAllViews(); tools.clear(); perms.clear(); thoughts.clear(); curMsg = null; curThought = null; lastSeq = 0; setRunning(false)
+        permDialog?.dismiss(); permDialog = null; permShown = null
+        list.removeAllViews(); tools.clear(); perms.clear(); askCards.clear(); thoughts.clear(); curMsg = null; curThought = null; lastSeq = 0; setRunning(false)
+        taskId = null; taskState = "idle"; olderBtn = null; updateTaskStatus()
     }
     // ── 会话切换: 骨架屏 + 内存缓存 + 分页历史 + 后台 Markdown ──
     private class Cached(val meta: JSONObject, val hist: JSONObject)
     private val memCache = object : java.util.LinkedHashMap<String, Cached>(8, 0.75f, true) { override fun removeEldestEntry(e: MutableMap.MutableEntry<String, Cached>?) = size > 6 }
-    private var histFirst = 0; private var histMore = false; private var olderBtn: TextView? = null; private var loadingOlder = false
+    private var histFirst = 0L; private var histMore = false; private var olderBtn: TextView? = null; private var loadingOlder = false
     private var skeleton: View? = null
     private fun showSkeleton() {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(16), 0, 0) }
@@ -511,8 +605,9 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
     }
     private fun hideSkeleton() { skeleton?.let { list.removeView(it) }; skeleton = null }
     private fun openSession(id: String?) {
+        if (sid != id && (running || perms.isNotEmpty())) CodexService.start(this)
         Md.onLink = { t -> h.post { openLink(t) } }
-        gen++; sid = id; session = null; cfgOpts = JSONArray(); CxPrefs.setSession(this, id); visibleSession = id; clearChat(); updateTitle()
+        gen++; streamCall?.cancel(); sid = id; session = null; cfgOpts = JSONArray(); deliveryUnknown = false; CxPrefs.setSession(this, id); visibleSession = if (paneVisible) id else null; clearChat(); updateTitle()
         if (id == null && newAgent() != "codex") loadCfg()
         if (id == null) { emptyState(); return }
         val g = gen; val t0 = System.currentTimeMillis()
@@ -523,7 +618,8 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
         bg {
             var m: Pair<Int, String>? = null
             val th = Thread { m = Cx.req(ctx, "GET", "/sessions/$id") }.apply { start() }
-            val e = Cx.req(this, "GET", "/sessions/$id/history?turns=6"); th.join()
+            val recovered = AgentRepository.recover(this, id)
+            val e = AgentRepository.snapshot(this, id); th.join()
             val t1 = System.currentTimeMillis()
             if (g != gen) return@bg
             val mm = m!!
@@ -532,11 +628,13 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
             val t2 = System.currentTimeMillis()
             runOnUiThread {
                 if (g != gen) return@runOnUiThread
-                if (mm.first == 404) { CxPrefs.setSession(this, null); openSession(null); return@runOnUiThread }
+                if (mm.first == 404) { toast("该消息关联的对话已不存在"); CxPrefs.setSession(this, null); openSession(null); return@runOnUiThread }
                 if (mm.first != 200 || ho == null) { hideSkeleton(); if (c == null) sys("加载失败：" + Cx.err(if (mm.first != 200) mm else e)); return@runOnUiThread }
                 val meta = JSONObject(mm.second); session = meta; updateTitle()
+                deliveryUnknown = recovered.any { it.unknown }
                 meta.optInt("project_id", -1).let { pj -> if (pj >= 0 && pj != CxPrefs.project(this)) { CxPrefs.setProject(this, pj); buildDrawer() } else if (autoOpened != sid) loadThreads() }; if (curAgent() != "codex") loadCfg()
-                val same = c != null && c.hist.optInt("last") == ho.optInt("last")
+                val same = c != null && c.hist.optLong("last") == ho.optLong("last") &&
+                    c.hist.optString("data_epoch") == ho.optString("data_epoch")
                 memCache[id] = Cached(meta, ho)
                 val t3 = System.currentTimeMillis()
                 if (!same) { clearChatKeep(); renderHistory(ho, false) } else status(ho)
@@ -549,11 +647,11 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
     private var histMode = false
     private fun renderHistory(ho: JSONObject, fromCache: Boolean) {
         hideSkeleton()
-        histFirst = ho.optInt("first"); histMore = ho.optBoolean("more")
+        histFirst = ho.optLong("first"); histMore = ho.optBoolean("more")
         if (histMore) addOlderBtn()
         val a = ho.getJSONArray("events"); histMode = true
         for (i in 0 until a.length()) apply(a.getJSONObject(i))
-        histMode = false; lastSeq = ho.optInt("last")
+        histMode = false; lastSeq = ho.optLong("last")
         if (!fromCache) status(ho)
         pendingBanner?.let { list.addView(UI.text(this, it, 12.5f, R.color.muted).apply { gravity = Gravity.CENTER; setPadding(dp(8), dp(4), dp(8), dp(10)) }, if (olderBtn != null) 1 else 0); if (!fromCache) pendingBanner = null }
         renderNow(); scrollEnd(true); scroll.post { scroll.scrollTo(0, maxOf(0, list.height - scroll.height)) }
@@ -581,7 +679,7 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
                 closeBlocks(); histMode = false; list = keep
                 curMsg = sv[0] as MdView?; curMsgSb = sv[1] as StringBuilder; curThought = sv[2] as TextView?; curThoughtSb = sv[3] as StringBuilder; shown = sv[4] as Int
                 olderBtn?.let { list.removeView(it) }; olderBtn = null
-                histFirst = ho.optInt("first"); histMore = ho.optBoolean("more")
+                histFirst = ho.optLong("first"); histMore = ho.optBoolean("more")
                 val before = list.height; val views = (0 until tmp.childCount).map { tmp.getChildAt(it) }; tmp.removeAllViews()
                 for ((k, v) in views.withIndex()) list.addView(v, k)
                 if (histMore) addOlderBtn()
@@ -590,55 +688,161 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
         }
     }
     private fun emptyState() {
-        list.addView(UI.text(this, "有什么可以帮你？", 24f, R.color.text, true).apply { gravity = Gravity.CENTER; setPadding(0, dp(140), 0, dp(6)) })
-        list.addView(UI.text(this, "在 ${projName(CxPrefs.project(this))} 里工作 · 所有操作在你的 Mac 上执行", 13.5f, R.color.muted).apply { gravity = Gravity.CENTER })
+        val configured = Prefs.configured(this)
+        val needsProject = CxPrefs.project(this) < 0
+        list.addView(UI.text(this, if (!configured) "连接你的电脑" else if (needsProject) "先选择一个项目" else "有什么可以帮你？", 24f, R.color.text, true).apply { gravity = Gravity.CENTER; setPadding(0, dp(100), 0, dp(10)) })
+        list.addView(UI.text(this, when {
+            !configured -> "在电脑运行 leoagent-server pair，扫描二维码或粘贴配对链接"
+            needsProject -> "选择电脑上的项目目录，Agent 会在该目录中执行任务"
+            else -> "在 ${projName(CxPrefs.project(this))} 里工作 · 由你的电脑执行"
+        }, 13.5f, R.color.muted).apply { gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), dp(14)) })
+        if (!configured || needsProject) list.addView(UI.filledButton(this, if (!configured) "连接电脑" else "选择项目") {
+            if (!configured) act.startActivity(Intent(act, SettingsActivity::class.java)) else pickProject()
+        }, UI.lp(this, t = 10))
     }
     private fun status(o: JSONObject) {
         setRunning(o.optBoolean("running"))
+        taskState = o.optString("task_state", o.optJSONObject("task")?.optString("state") ?: "idle")
+        taskId = o.optJSONObject("task")?.optString("id")?.takeIf { it.isNotEmpty() }
+        if (taskState == "unknown") setRunning(false)
         val p = o.optJSONArray("pending") ?: JSONArray(); val live = (0 until p.length()).map { p.getString(it) }.toSet()
-        perms.keys.retainAll(live); showNextPerm()
+        perms.keys.retainAll(live)
+        o.optJSONArray("interactions")?.let { interactions ->
+            val liveAsks = HashSet<String>()
+            for (i in 0 until interactions.length()) {
+                val item = interactions.getJSONObject(i)
+                val spec = item.optJSONObject("spec") ?: continue
+                val id = item.optString("id")
+                if (item.optString("state", "pending") != "pending") continue
+                if (item.optString("kind") == "perm") {
+                    if (id !in responseInFlight) perms[id] = spec
+                } else {
+                    liveAsks.add(id)
+                    if (!askCards.containsKey(id)) askCard(spec)
+                }
+            }
+            askCards.keys.toList().filter { it !in liveAsks }.forEach { expireAsk(it) }
+            val liveIds = (0 until interactions.length()).map { interactions.getJSONObject(it).optString("id") }.toSet()
+            responseInFlight.retainAll(liveIds)
+        }
+        if (permShown != null && !perms.containsKey(permShown)) {
+            permDialog?.dismiss(); permDialog = null; permShown = null
+        }
+        updateTaskStatus(); showNextPerm()
     }
     private fun startStream() {
-        val s = sid ?: return; val g = ++gen
+        if (!paneVisible) return
+        val s = sid ?: return
+        streamCall?.cancel()
+        val g = ++gen
+        val host = Prefs.url(this); val token = Prefs.token(this)
+        fun active() = g == gen && paneVisible && !stopped && host == Prefs.url(this)
+        fun ui(action: () -> Unit): Boolean {
+            val done = CountDownLatch(1)
+            h.post { try { if (active()) action() } finally { done.countDown() } }
+            return done.await(5, TimeUnit.SECONDS) && active()
+        }
         Thread {
             var fails = 0
-            while (g == gen) {
+            var resnapshot = true
+            var epoch = ""
+            var generation = ""
+            while (active()) {
                 try {
+                    if (resnapshot) {
+                        val recovered = AgentRepository.recover(this, s)
+                        val snapshot = AgentRepository.snapshot(this, s)
+                        if (snapshot.first != 200) throw Exception("snapshot ${snapshot.first}")
+                        val data = JSONObject(snapshot.second)
+                        epoch = data.getString("data_epoch")
+                        generation = data.optString("server_generation")
+                        if (!ui {
+                            deliveryUnknown = recovered.any { it.unknown }
+                            clearChatKeep(); renderHistory(data, false); setConnection("")
+                        }) break
+                        resnapshot = false
+                    }
                     if (fails < 3) {
-                        val c = URL(CxPrefs.base(this) + "/sessions/$s/stream?since=$lastSeq").openConnection() as HttpURLConnection
-                        c.connectTimeout = 10000; c.readTimeout = 45000; c.setRequestProperty("X-Token", CxPrefs.token(this)); c.setRequestProperty("Accept", "text/event-stream")
-                        if (c.responseCode != 200) throw Exception("HTTP ${c.responseCode}")
-                        fails = 0
-                        c.inputStream.bufferedReader().use { r ->
-                            var ev = ""; val data = StringBuilder()
-                            while (g == gen) {
-                                val line = r.readLine() ?: break
-                                when {
-                                    line.startsWith("event:") -> ev = line.substring(6).trim()
-                                    line.startsWith("data:") -> data.append(line.substring(5).trim())
-                                    line.isEmpty() && data.isNotEmpty() -> { val o = JSONObject(data.toString()); val e = ev; data.setLength(0)
-                                        runOnUiThread { if (g == gen) { if (e == "status") status(o) else { live = true; apply(o); live = false; scheduleRender() } } } }
+                        val client = Http.client.newBuilder().readTimeout(45, TimeUnit.SECONDS)
+                            .followRedirects(false).followSslRedirects(false).build()
+                        val call = client.newCall(Request.Builder().url("$host/api/v1/sessions/$s/stream?after=$lastSeq")
+                            .header("X-Token", token).header("X-Data-Epoch", epoch).header("Accept", "text/event-stream").build())
+                        streamCall = call
+                        try {
+                            call.execute().use { response ->
+                                if (response.code == 409) resnapshot = true
+                                if (response.code != 200) throw Exception("stream ${response.code}")
+                                fails = 0
+                                if (!ui { setConnection("") }) return@Thread
+                                response.body!!.charStream().buffered().use { reader ->
+                                    var event = ""
+                                    val data = StringBuilder()
+                                    while (active()) {
+                                        val line = reader.readLine() ?: break
+                                        when {
+                                            line.startsWith("event:") -> event = line.substring(6).trim()
+                                            line.startsWith("data:") -> {
+                                                if (data.isNotEmpty()) data.append('\n')
+                                                data.append(line.substring(5).trimStart())
+                                            }
+                                            line.isEmpty() && data.isNotEmpty() -> {
+                                                val o = JSONObject(data.toString())
+                                                data.setLength(0)
+                                                if (event == "status" && o.optString("server_generation") != generation) {
+                                                    resnapshot = true; break
+                                                }
+                                                if (!ui {
+                                                    if (event == "status") status(o)
+                                                    else { live = true; apply(o); live = false; scheduleRender() }
+                                                }) return@Thread
+                                                event = ""
+                                            }
+                                        }
+                                    }
                                 }
                             }
+                        } finally {
+                            call.cancel()
+                            if (streamCall === call) streamCall = null
                         }
-                        c.disconnect()
                     } else {
-                        val r = Cx.req(this, "GET", "/sessions/$s/events?since=$lastSeq&wait=20", readTimeout = 35000)
-                        if (r.first != 200) throw Exception("HTTP ${r.first}")
-                        val o = JSONObject(r.second); val a = o.getJSONArray("events")
-                        runOnUiThread { if (g == gen) { live = true; for (i in 0 until a.length()) apply(a.getJSONObject(i)); live = false; status(o); scheduleRender() } }
-                        if (++fails > 40) fails = 0  // 偶尔回到 SSE
+                        val (code, text) = Http.call("$host/api/v1/sessions/$s/events?after=$lastSeq&wait=20",
+                            headers = mapOf("X-Token" to token, "X-Data-Epoch" to epoch), readTimeoutMs = 35000)
+                        if (code == 409) resnapshot = true
+                        if (code != 200) throw Exception("events $code")
+                        val o = JSONObject(text)
+                        if (o.optString("server_generation") != generation) resnapshot = true
+                        else if (!ui {
+                            live = true
+                            val events = o.getJSONArray("events")
+                            for (i in 0 until events.length()) apply(events.getJSONObject(i))
+                            live = false; status(o); scheduleRender(); setConnection("")
+                        }) break
+                        if (++fails > 10) fails = 0
                     }
-                } catch (e: Exception) { fails++; try { Thread.sleep(if (fails > 5) 5000 else 1500) } catch (_: Exception) {} }
+                } catch (_: Exception) {
+                    if (!active()) break
+                    fails++
+                    ui { setConnection("连接暂时中断，正在重连；任务状态以电脑端为准") }
+                    val delay = minOf(30000L, 500L * (1L shl minOf(fails, 6))) + kotlin.random.Random.nextLong(250)
+                    var elapsed = 0L
+                    while (active() && elapsed < delay) { Thread.sleep(200); elapsed += 200 }
+                }
             }
         }.start()
     }
 
     private fun apply(ev: JSONObject) {
-        val seq = ev.optInt("seq"); if (!histMode) { if (seq <= lastSeq) return; lastSeq = seq }
+        val seq = ev.optLong("seq"); if (!histMode) { if (seq <= lastSeq) return; lastSeq = seq }
         val d = ev.optJSONObject("data") ?: JSONObject()
         if (ev.has("full_seq")) d.put("_fs", ev.optInt("full_seq"))
         when (ev.optString("type")) {
+            "task" -> if (!histMode) {
+                taskId = d.optString("task_id").takeIf { it.isNotEmpty() }
+                taskState = d.optString("state", taskState)
+                setRunning(taskState in setOf("queued", "running", "waiting_approval", "waiting_input", "cancelling", "recovering"))
+                updateTaskStatus()
+            }
             "user" -> { closeBlocks(); if (pendingEcho != null && pendingEcho == d.optString("text")) pendingEcho = null else userBubble((if (d.optString("from") == "desktop") "🖥 " else "") + d.optString("text"), d.optInt("images")) }
             "msg" -> { curThought = null; hideTyping()
                 if (curMsg == null) { curMsgSb = StringBuilder(); shown = 0; curMsg = MdView(this).apply { background = UI.card(context, 20); setPadding(dp(16), dp(12), dp(16), dp(12)); UI.lift(this) }
@@ -662,11 +866,19 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
                 when (d.optString("stopReason")) { "cancelled" -> sys("已停止"); "error" -> {}; else -> {} } } }
             "title" -> { session?.put("title", d.optString("title")); updateTitle() }
             "error" -> hideTyping().let { sys("❌ " + d.optString("msg"), R.color.strong) }
+            "deferred" -> sys(if (d.optString("state") == "blocked") "后续回答尚未发送：原任务未正常完成，请核对后重新提交。" else "回答已保存，等待当前任务结束后发送。")
         }
     }
     private fun finishMsg() { val m = curMsg ?: return; h.removeCallbacks(tw); twOn = false; shown = curMsgSb.length; m.setMd(curMsgSb.toString()) }
     private fun closeBlocks() { finishMsg(); curMsg = null; curThought = null }
-    private fun scheduleRender() { if (!renderPending) { showNextPerm(); if (!twOn) stick(); return }; if (!h.hasCallbacks(renderR)) h.postDelayed(renderR, 60) }
+    private var renderScheduled = false
+    private fun scheduleRender() {
+        if (!renderPending) { showNextPerm(); if (!twOn) stick(); return }
+        if (!renderScheduled) {
+            renderScheduled = true
+            h.postDelayed({ renderScheduled = false; renderR.run() }, 60)
+        }
+    }
     private val renderR = Runnable { renderNow(); scrollEnd(false) }
     private fun renderNow() { renderPending = false; finishMsg(); showNextPerm() }
     private fun scrollEnd(force: Boolean) { if (force) atBottom = true; if (atBottom) scroll.post { scroll.smoothScrollTo(0, maxOf(0, list.height - scroll.height)) } }
@@ -725,6 +937,7 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
     private val askCards = HashMap<String, LinearLayout>()
     private fun askCard(d: JSONObject) {
         val rid = d.optString("rid")
+        if (askCards.containsKey(rid)) return
         val card = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(12), dp(14), dp(12)); background = UI.round(context, col(R.color.primaryC), 14) }
         askCards[rid] = card
         list.addView(card, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(10) })
@@ -761,8 +974,25 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
             for ((qid, l) in sel) { val all = l.toMutableList(); texts[qid]?.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let { all.add(it) }; if (all.isNotEmpty()) ans.put(qid, JSONArray(all)) }
             if (!skip && ans.length() == 0) { toast("请先选择或输入"); return }
             row.alpha = 0.4f; for (k in 0 until row.childCount) row.getChildAt(k).isEnabled = false
-            bg { val r = Cx.req(this, "POST", "/ask/$rid", JSONObject().put("answers", ans).put("skip", skip))
-                runOnUiThread { if (r.first != 200) { toast(Cx.err(r)); row.alpha = 1f; for (k in 0 until row.childCount) row.getChildAt(k).isEnabled = true } } }
+            val current = sid ?: return
+            responseInFlight.add(rid)
+            bg {
+                val r = AgentRepository.command(this, current, "interaction", "/interactions/$rid/respond",
+                    JSONObject().put("answers", ans).put("skip", skip))
+                runOnUiThread {
+                    if (sid != current) return@runOnUiThread
+                    if (!r.accepted) toast(r.message)
+                    if (r.unknown) deliveryUnknown = true
+                    if (r.body.optString("code") in setOf("interaction_expired", "interaction_already_handled")) {
+                        responseInFlight.remove(rid)
+                        expireAsk(rid)
+                    } else if (!r.accepted && !r.unknown) {
+                        responseInFlight.remove(rid); row.alpha = 1f
+                        for (k in 0 until row.childCount) row.getChildAt(k).isEnabled = true
+                    }
+                    updateTaskStatus(); startStream()
+                }
+            }
         }
         row.addView(UI.filledButton(this, "提交") { submit(false) }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 2f))
         row.addView(UI.filledButton(this, "跳过", R.color.surface2, R.color.text) { submit(true) }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { leftMargin = dp(8) })
@@ -777,13 +1007,23 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
         if (q.isNotEmpty()) card.addView(UI.text(this, q, 14f, R.color.muted).apply { setPadding(0, dp(4), 0, 0) })
         card.addView(UI.text(this, (if (d.optString("by") == "desktop") "已在桌面端回答：" else "已回答：") + d.optString("summary"), 14.5f, R.color.text).apply { setPadding(0, dp(4), 0, 0) })
     }
+    private fun expireAsk(rid: String) {
+        val card = askCards.remove(rid) ?: return
+        val title = (card.getChildAt(0) as? TextView)?.text ?: "问题"
+        card.removeAllViews()
+        card.background = UI.round(this, col(R.color.bg), 14)
+        card.addView(UI.text(this, title, 13f, R.color.muted, true))
+        card.addView(UI.text(this, "请求已失效或已在其他设备处理", 13f, R.color.muted))
+    }
 
     // ───────── 审批 ─────────
     private fun showNextPerm() {
+        if (!paneVisible) return
         if (permShown != null && perms.containsKey(permShown)) return
         val (rid, d) = perms.entries.firstOrNull()?.toPair() ?: return
         permShown = rid
         val dlg = BottomSheetDialog(this)
+        permDialog = dlg
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(18), dp(20), dp(24)); setBackgroundColor(col(R.color.surface)) }
         box.addView(UI.text(this, "Codex 请求执行", 13f, R.color.muted))
         box.addView(UI.text(this, d.optString("title"), 17f, R.color.text, true).apply { setPadding(0, dp(4), 0, dp(8)) })
@@ -798,15 +1038,34 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
                 if (k == "allow_once") android.R.color.white else if (k.startsWith("reject")) R.color.strong else R.color.text) {
                 answer(rid, o.optString("id")); dlg.dismiss() }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(8) })
         }
-        dlg.setContentView(box); dlg.setOnDismissListener { if (permShown == rid) permShown = null }
+        dlg.setContentView(box); dlg.setOnDismissListener {
+            if (permShown == rid) permShown = null
+            if (permDialog === dlg) permDialog = null
+        }
         dlg.setCancelable(true); dlg.show()
     }
     private fun answer(rid: String, opt: String) { perms.remove(rid); permShown = null
-        bg { val r = Cx.req(this, "POST", "/perm/$rid", JSONObject().put("option", opt)); if (r.first != 200) runOnUiThread { toast(Cx.err(r)) } } }
+        val current = sid ?: return
+        responseInFlight.add(rid)
+        bg {
+            val r = AgentRepository.command(this, current, "interaction", "/interactions/$rid/respond", JSONObject().put("option", opt))
+            runOnUiThread {
+                if (sid != current) return@runOnUiThread
+                if (!r.accepted) toast(r.message)
+                if (r.unknown) deliveryUnknown = true else if (!r.accepted) responseInFlight.remove(rid)
+                updateTaskStatus(); startStream()
+            }
+        }
+    }
 
     // ───────── 发送 / 停止 / 图片 ─────────
     private fun send() {
+        if (!Prefs.configured(this)) { act.startActivity(Intent(act, SettingsActivity::class.java)); return }
+        if (sid == null && CxPrefs.project(this) < 0) { toast("请先选择电脑上的项目目录"); pickProject(); return }
+        if (taskState == "unknown") { reviewUnknownTask(); return }
+        if (deliveryUnknown) { reviewPending(); return }
         val t = input.text.toString().trim(); if (t.isEmpty() && images.isEmpty()) return
+        val submittedImages = images.toList()
         val body = JSONObject().put("text", t)
         if (images.isNotEmpty()) body.put("images", JSONArray().apply { images.forEach { put(JSONObject().put("mime", it.first).put("data", it.second)) } })
         if (sid == null) list.removeAllViews()
@@ -814,19 +1073,94 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
         input.setText(""); images.clear(); thumbs.removeAllViews(); thumbs.visibility = View.GONE; setRunning(true)
         (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(input.windowToken, 0)
         val pid = CxPrefs.project(this)
+        val conn = Cx.connection(this)
+        val submittedSid = sid
+        val creation = JSONObject().put("project", pid).put("model", CxPrefs.model(this)).put("effort", CxPrefs.effort(this)).put("mode", CxPrefs.mode(this)).put("agent", newAgent()).put("config", CxPrefs.agentCfg(this, newAgent()))
         bg {
-            var s = sid
+            runCatching { MessageStore.prepare(this, conn) }
+            var s = submittedSid
             if (s == null) {
-                val r = Cx.req(this, "POST", "/sessions", JSONObject().put("project", pid).put("model", CxPrefs.model(this)).put("effort", CxPrefs.effort(this)).put("mode", CxPrefs.mode(this)).put("agent", newAgent()).put("config", CxPrefs.agentCfg(this, newAgent())))
-                if (r.first != 200) { runOnUiThread { setRunning(false); hideTyping(); pendingEcho = null; input.setText(t); toast("创建对话失败：" + Cx.err(r)) }; return@bg }
+                val r = Cx.req(this, "POST", "/sessions", creation, connection = conn)
+                if (r.first != 200) { runOnUiThread { if (!conn.isCurrent(this) || sid != submittedSid) return@runOnUiThread; setRunning(false); hideTyping(); pendingEcho = null; input.setText(t); toast("创建对话失败：" + Cx.err(r)) }; return@bg }
                 val o = JSONObject(r.second); s = o.getString("id")
-                runOnUiThread { sid = s; session = o; CxPrefs.setSession(this, s); visibleSession = s; updateTitle(); startStream() }
+                runOnUiThread { if (!conn.isCurrent(this) || sid != submittedSid) return@runOnUiThread; sid = s; session = o; CxPrefs.setSession(this, s); visibleSession = if (paneVisible) s else null; updateTitle(); startStream() }
             }
-            val r = Cx.req(this, "POST", "/sessions/$s/prompt", body, 60000)
-            runOnUiThread { if (r.first != 200) { setRunning(false); hideTyping(); pendingEcho = null; toast("发送失败：" + Cx.err(r)) } else { scrollEnd(true); buildDrawer() } }
+            val r = AgentRepository.command(this, s!!, "prompt", "/sessions/$s/tasks", body, expectedConnection = conn)
+            runOnUiThread {
+                if (!conn.isCurrent(this) || sid != s) return@runOnUiThread
+                if (!r.accepted) {
+                    hideTyping(); pendingEcho = null
+                    if (r.unknown) {
+                        deliveryUnknown = true
+                        setConnection("提交结果暂未确认，正在查询原操作回执")
+                    } else {
+                        setRunning(false)
+                        if (input.text.isEmpty()) input.setText(t)
+                        if (images.isEmpty()) images.addAll(submittedImages)
+                    }
+                    toast(r.message)
+                } else {
+                    taskId = r.body.optString("task_id").takeIf { it.isNotEmpty() }
+                    taskState = "queued"; scrollEnd(true); buildDrawer()
+                }
+                updateTaskStatus(); startStream()
+            }
         }
     }
-    private fun stop() { val s = sid ?: return; bg { Cx.req(this, "POST", "/sessions/$s/cancel", JSONObject()) }; toast("正在停止…") }
+    private fun stop() {
+        val id=taskId
+        if (id != null) {
+            val current = sid ?: return
+            bg {
+                val r = AgentRepository.command(this, current, "cancel", "/tasks/$id/cancel", JSONObject())
+                runOnUiThread {
+                    if (sid != current) return@runOnUiThread
+                    if (!r.accepted) toast(r.message)
+                    if (r.unknown) deliveryUnknown = true
+                    updateTaskStatus(); startStream()
+                }
+            }
+        } else {
+            val s = sid ?: return
+            bg { Cx.req(this, "POST", "/sessions/$s/cancel", JSONObject()) }
+        }
+        toast("正在停止…")
+    }
+    private fun reviewUnknownTask() {
+        val current = sid ?: return
+        val id = taskId ?: return
+        AlertDialog.Builder(this).setTitle("核对本轮结果")
+            .setMessage("本轮可能已经修改文件或执行命令。请先查看输出和文件差异；解除占用不会撤销已有改动。电脑会核对原 Agent 是否结束，无法确认时会继续保留占用。")
+            .setNeutralButton("查看文件差异") { _, _ -> showDiff() }
+            .setNegativeButton("暂不处理", null)
+            .setPositiveButton("已核对，结束本轮") { _, _ ->
+                bg {
+                    val r = AgentRepository.command(this, current, "resolve", "/tasks/$id/resolve",
+                        JSONObject().put("acknowledge_unknown_effects", true))
+                    runOnUiThread {
+                        if (sid != current) return@runOnUiThread
+                        if (!r.accepted) toast(r.message)
+                        if (r.unknown) deliveryUnknown = true
+                        startStream()
+                    }
+                }
+            }.show()
+    }
+    private fun reviewPending() {
+        val current = sid ?: return
+        AlertDialog.Builder(this).setTitle("核对未确认操作")
+            .setMessage("手机保留了原操作 ID 和参数，重新连接会查询原回执。若电脑数据或配对身份已改变，请先在电脑核对任务和文件结果；清除本机记录不会停止任务，也不会撤销已有改动。")
+            .setNeutralButton("重新查询") { _, _ -> startStream() }
+            .setNegativeButton("取消", null)
+            .setPositiveButton("我已核对，清除等待记录") { _, _ ->
+                bg {
+                    try {
+                        AgentRepository.clearReviewedPending(this, current)
+                        runOnUiThread { if (sid == current) { deliveryUnknown = false; updateTaskStatus(); startStream() } }
+                    } catch (_: Exception) { runOnUiThread { toast("无法更新本机操作记录") } }
+                }
+            }.show()
+    }
     private fun pickImage() = act.startActivityForResult(Intent(Intent.ACTION_GET_CONTENT).setType("image/*"), 7)
     fun onActivityResult(rq: Int, rc: Int, data: Intent?) {
         val u = data?.data ?: return; if (rq != 7 || rc != android.app.Activity.RESULT_OK) return

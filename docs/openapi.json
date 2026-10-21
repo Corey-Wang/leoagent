@@ -1,0 +1,1210 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "LeoAgent core API",
+    "version": "0.1.0",
+    "description": "Implemented core routes. Other UI APIs remain documented in api.md. X-Token contains a revocable device credential; query tokens are rejected."
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "security": [
+    {
+      "DeviceCredential": []
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Server identity, generation and feature flags",
+        "responses": {
+          "200": {
+            "description": "Result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request rejected or outcome unresolved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{sid}/tasks": {
+      "post": {
+        "summary": "Persist input, task and receipt atomically",
+        "responses": {
+          "202": {
+            "description": "Persisted response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskReceipt"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request rejected or outcome unresolved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Data-Epoch",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "images": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "mime",
+                        "data"
+                      ],
+                      "properties": {
+                        "mime": {
+                          "type": "string"
+                        },
+                        "data": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{sid}/snapshot": {
+      "get": {
+        "summary": "Consistent snapshot and its committed global cursor",
+        "responses": {
+          "200": {
+            "description": "Result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Snapshot"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request rejected or outcome unresolved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/sessions/{sid}/events": {
+      "get": {
+        "summary": "Bounded session events after a global cursor",
+        "responses": {
+          "200": {
+            "description": "Result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventPage"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request rejected or outcome unresolved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Data-Epoch",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "wait",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 25
+            }
+          }
+        ]
+      }
+    },
+    "/sessions/{sid}/stream": {
+      "get": {
+        "summary": "SSE ev/status records; reconnect using a snapshot and applied cursor",
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Data-Epoch",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SSE stream; ev data follows Event envelope",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Authorization or cursor reset error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tasks/{id}": {
+      "get": {
+        "summary": "Task and observed runtime evidence",
+        "responses": {
+          "200": {
+            "description": "Result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request rejected or outcome unresolved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/tasks/{id}/cancel": {
+      "post": {
+        "summary": "Request cancellation; acceptance does not prove execution stopped",
+        "responses": {
+          "202": {
+            "description": "Persisted response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskReceipt"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request rejected or outcome unresolved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Data-Epoch",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tasks/{id}/resolve": {
+      "post": {
+        "summary": "Acknowledge unknown effects and verify process evidence before releasing project",
+        "responses": {
+          "200": {
+            "description": "Result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskReceipt"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request rejected or outcome unresolved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Original resolution is still pending",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskReceipt"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Data-Epoch",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "acknowledge_unknown_effects"
+                ],
+                "properties": {
+                  "acknowledge_unknown_effects": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/interactions/{id}/respond": {
+      "post": {
+        "summary": "Persist permission/question response; queued/written is not agent confirmation",
+        "responses": {
+          "200": {
+            "description": "Result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request rejected or outcome unresolved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Original decision is accepted and delivery remains unresolved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Persisted decision with unknown delivery, query this operation instead of resending",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Data-Epoch",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "option": {
+                    "type": "string"
+                  },
+                  "answers": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "skip": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/operations/{id}": {
+      "get": {
+        "summary": "Original caller-scoped operation receipt",
+        "responses": {
+          "200": {
+            "description": "Result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request rejected or outcome unresolved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/pairing/claim": {
+      "post": {
+        "summary": "Consume five-minute invitation and wait for computer confirmation",
+        "responses": {
+          "200": {
+            "description": "Result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingClaim"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request rejected or outcome unresolved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "code",
+                  "device_name"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "device_name": {
+                    "type": "string",
+                    "maxLength": 80,
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/pairing/poll": {
+      "post": {
+        "summary": "Deliver approved device credential once; lost delivery requires fresh pairing",
+        "responses": {
+          "200": {
+            "description": "Result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingPoll"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request rejected or outcome unresolved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "pairing_id",
+                  "poll_secret"
+                ],
+                "properties": {
+                  "pairing_id": {
+                    "type": "string"
+                  },
+                  "poll_secret": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "DeviceCredential": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Token"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "minLength": 1
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "error",
+          "code",
+          "message",
+          "request_id"
+        ]
+      },
+      "Event": {
+        "type": "object",
+        "required": [
+          "seq",
+          "type",
+          "data"
+        ],
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "type": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "ts": {
+            "type": "number"
+          },
+          "task_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "Task": {
+        "type": "object",
+        "required": [
+          "id",
+          "session_id",
+          "state",
+          "project_id",
+          "dispatch_started",
+          "created_at",
+          "updated_at",
+          "server_generation",
+          "cancel_requested"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "project_id": {
+            "type": "integer"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "waiting_approval",
+              "waiting_input",
+              "cancelling",
+              "recovering",
+              "unknown",
+              "succeeded",
+              "failed",
+              "cancelled",
+              "interrupted"
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dispatch_started": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "number"
+          },
+          "updated_at": {
+            "type": "number"
+          },
+          "server_generation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "cancel_requested": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Receipt": {
+        "type": "object",
+        "required": [
+          "operation_id",
+          "status"
+        ],
+        "properties": {
+          "operation_id": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "rejected",
+              "submitted",
+              "resolved",
+              "unknown"
+            ]
+          },
+          "delivery": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "written",
+              "unknown"
+            ]
+          },
+          "http_status": {
+            "type": "integer"
+          }
+        }
+      },
+      "Snapshot": {
+        "type": "object",
+        "required": [
+          "server_id",
+          "data_epoch",
+          "server_generation",
+          "cursor",
+          "task",
+          "interactions",
+          "events"
+        ],
+        "properties": {
+          "server_id": {
+            "type": "string"
+          },
+          "data_epoch": {
+            "type": "string"
+          },
+          "server_generation": {
+            "type": "string"
+          },
+          "cursor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "task": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Task"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "interactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Interaction"
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            }
+          },
+          "deferred": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "first": {
+            "type": "integer"
+          },
+          "more": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "required": [
+          "ok",
+          "api_version",
+          "server_id",
+          "data_epoch",
+          "server_generation",
+          "features",
+          "version"
+        ],
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "api_version": {
+            "const": 1
+          },
+          "server_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "data_epoch": {
+            "type": "string",
+            "minLength": 1
+          },
+          "server_generation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "features": {
+            "type": "object",
+            "required": [
+              "durable_tasks",
+              "idempotent_prompts",
+              "snapshots",
+              "device_pairing"
+            ],
+            "properties": {
+              "durable_tasks": {
+                "type": "boolean"
+              },
+              "idempotent_prompts": {
+                "type": "boolean"
+              },
+              "snapshots": {
+                "type": "boolean"
+              },
+              "device_pairing": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "Interaction": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "spec"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "enum": [
+              "perm",
+              "ask"
+            ]
+          },
+          "spec": {
+            "type": "object"
+          },
+          "task_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "responding"
+            ]
+          }
+        }
+      },
+      "Status": {
+        "type": "object",
+        "required": [
+          "running",
+          "alive",
+          "pending",
+          "task",
+          "task_state",
+          "server_generation",
+          "interactions"
+        ],
+        "properties": {
+          "running": {
+            "type": "boolean"
+          },
+          "alive": {
+            "type": "boolean"
+          },
+          "pending": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "task": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Task"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "task_state": {
+            "enum": [
+              "idle",
+              "queued",
+              "running",
+              "waiting_approval",
+              "waiting_input",
+              "cancelling",
+              "recovering",
+              "unknown",
+              "succeeded",
+              "failed",
+              "cancelled",
+              "interrupted"
+            ]
+          },
+          "server_generation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "interactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Interaction"
+            }
+          }
+        }
+      },
+      "EventPage": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Status"
+          },
+          {
+            "type": "object",
+            "required": [
+              "events"
+            ],
+            "properties": {
+              "events": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Event"
+                },
+                "maxItems": 2000
+              }
+            }
+          }
+        ]
+      },
+      "TaskReceipt": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Receipt"
+          },
+          {
+            "type": "object",
+            "required": [
+              "task_id"
+            ],
+            "properties": {
+              "task_id": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        ]
+      },
+      "PairingClaim": {
+        "type": "object",
+        "required": [
+          "pairing_id",
+          "poll_secret",
+          "verification",
+          "state"
+        ],
+        "properties": {
+          "pairing_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "poll_secret": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "verification": {
+            "type": "string",
+            "pattern": "^[0-9]{6}$"
+          },
+          "state": {
+            "const": "pending"
+          }
+        }
+      },
+      "PairingPoll": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "state",
+              "expires_at"
+            ],
+            "properties": {
+              "state": {
+                "const": "pending"
+              },
+              "expires_at": {
+                "type": "number"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "state",
+              "device_id",
+              "token",
+              "server_id",
+              "data_epoch"
+            ],
+            "properties": {
+              "state": {
+                "const": "paired"
+              },
+              "device_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "token": {
+                "type": "string",
+                "pattern": "^ld_[a-f0-9]{64}$"
+              },
+              "server_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "data_epoch": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

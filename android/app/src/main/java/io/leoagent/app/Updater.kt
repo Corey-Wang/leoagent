@@ -27,8 +27,6 @@ object Updater {
 
     fun myCode(a: Activity): Long = a.packageManager.getPackageInfo(a.packageName, 0).let { if (Build.VERSION.SDK_INT >= 28) it.longVersionCode else it.versionCode.toLong() }
 
-    fun browserUrl(a: Activity) = "${Prefs.url(a)}/api/app/apk?token=${Uri.encode(Prefs.token(a))}"
-
     fun check(a: Activity, manual: Boolean) = Thread {
         try {
             AppLog.i(T, "check manual=$manual mine=${myCode(a)}")
@@ -50,9 +48,18 @@ object Updater {
     private fun toast(a: Activity, s: String) = a.runOnUiThread { Toast.makeText(a, s, Toast.LENGTH_LONG).show() }
 
     fun openBrowser(a: Activity) {
-        AppLog.i(T, "open browser")
-        try { a.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(browserUrl(a))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-        catch (e: Exception) { AppLog.e(T, "browser failed", e); toast(a, "无法打开浏览器: ${e.message}") }
+        Thread {
+            try {
+                val result = Http.call("${Prefs.url(a)}/api/app/download-link", "POST", mapOf("X-Token" to Prefs.token(a)))
+                check(result.first == 200) { "无法创建短期下载链接：HTTP ${result.first}" }
+                val path = JSONObject(result.second).getString("url")
+                check(path.startsWith("/api/app/download/") && !path.contains("..")) { "无效的下载链接" }
+                a.runOnUiThread {
+                    try { a.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Prefs.url(a) + path)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    catch (_: Exception) { toast(a, "无法打开浏览器") }
+                }
+            } catch (e: Exception) { toast(a, "无法打开下载：${e.message}") }
+        }.start()
     }
 
     private fun cause(e: Throwable): String = when (e) {
@@ -111,12 +118,17 @@ object Updater {
                 while (true) {   // 手动跟随重定向 (含 http<->https), 只在同源时带 token
                     conn = (url.openConnection() as HttpURLConnection).apply {
                         instanceFollowRedirects = false; connectTimeout = 20000; readTimeout = 60000
-                        if (url.host == URL(Prefs.url(a)).host) setRequestProperty("X-Token", Prefs.token(a))
+                        val origin = URL(Prefs.url(a))
+                        if (url.protocol == origin.protocol && url.host == origin.host && url.port == origin.port) setRequestProperty("X-Token", Prefs.token(a))
                         setRequestProperty("Accept-Encoding", "identity")
                     }
                     val rc = conn.responseCode
                     AppLog.i(T, "GET ${url.host}${url.path} -> $rc len=${conn.getHeaderField("Content-Length")} type=${conn.contentType}")
-                    if (rc in 300..399 && hops < 5) { url = URL(url, conn.getHeaderField("Location")); conn.disconnect(); hops++; continue }
+                    if (rc in 300..399 && hops < 5) {
+                        val next = URL(url, conn.getHeaderField("Location"))
+                        if (next.protocol !in listOf("https", "http") || url.protocol == "https" && next.protocol != "https") throw IOException("拒绝不安全的更新重定向")
+                        url = next; conn.disconnect(); hops++; continue
+                    }
                     if (rc == 401) throw IOException("服务器拒绝访问 (401)，App 里的 token 可能已失效")
                     if (rc != 200) throw IOException("服务器返回 HTTP $rc")
                     break
@@ -175,6 +187,6 @@ object Updater {
                    else pm.getPackageInfo(a.packageName, PackageManager.GET_SIGNATURES).signatures?.map { it.toCharsString() }
         val theirs = if (Build.VERSION.SDK_INT >= 28) ai.signingInfo?.apkContentsSigners?.map { it.toCharsString() } else ai.signatures?.map { it.toCharsString() }
         AppLog.i("update", "sig mine=${mine?.firstOrNull()?.hashCode()} apk=${theirs?.firstOrNull()?.hashCode()}")
-        theirs == null || mine == null || mine.toSet() == theirs.toSet()
-    } catch (e: Exception) { AppLog.e("update", "sig check error", e); true }
+        !theirs.isNullOrEmpty() && !mine.isNullOrEmpty() && mine.toSet() == theirs.toSet()
+    } catch (e: Exception) { AppLog.e("update", "sig check error", e); false }
 }

@@ -6,4 +6,5 @@
 <color name="weak">#F59E2B</color><color name="weakC">#FFF4E3</color><color name="info">#8A8CA6</color><color name="infoC">#F0F0F8</color>
 <color name="purple">#8B5CF6</color><color name="bar">#F2FFFFFF</color>
 <color name="glowA">#E3E3FF</color><color name="glowB">#F7EEFF</color><color name="primary2">#7B8CFF</color>
+<color name="md_table_stripe">#FAFAFE</color><color name="md_code_background">#F6F7FB</color>
 </resources>

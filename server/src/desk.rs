@@ -521,9 +521,10 @@ impl AgentLike for FirstTurn {
             if let Some(t) = t {
                 let turn = self.turn.lock().clone(); let tid = self.tid.lock().clone();
                 if self.running() && turn.is_some() {
-                    match self.rpc.call("turn/steer", json!({"threadId": tid, "input": [{"type": "text", "text": t, "text_elements": []}], "expectedTurnId": turn}), 20) { Ok(_) => return Ok(()), Err(e) => log(&format!("ft steer {e}")) }
+                    return self.rpc.call("turn/steer", json!({"threadId": tid, "input": [{"type": "text", "text": t, "text_elements": []}], "expectedTurnId": turn}), 20)
+                          .map(|_|()).map_err(|e|format!("桌面端补充信息结果未知，未另建任务重发：{e}"));
                 }
-                crate::queue_prompt(&self.sid, t);
+                crate::queue_prompt(&self.sid, t, spec["rid"].as_str())?;
             }
             return Ok(())
         }

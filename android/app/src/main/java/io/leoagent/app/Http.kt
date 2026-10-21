@@ -21,7 +21,10 @@ object Http {
         val rb = body?.toRequestBody(contentType.toMediaType()) ?: if (method == "POST" || method == "PUT") ByteArray(0).toRequestBody(null) else null
         val b = Request.Builder().url(url).method(method, rb)
         headers.forEach { (k, v) -> b.header(k, v) }
-        val cl = if (readTimeoutMs == 20000) client else client.newBuilder().readTimeout(readTimeoutMs.toLong(), TimeUnit.MILLISECONDS).build()
+        // An unkeyed POST must never be silently replayed after an ambiguous connection failure.
+        val cl = client.newBuilder().readTimeout(readTimeoutMs.toLong(), TimeUnit.MILLISECONDS)
+            .retryOnConnectionFailure(method == "GET" || method == "HEAD")
+            .followRedirects(false).followSslRedirects(false).build()
         cl.newCall(b.build()).execute().use { r -> return Pair(r.code, r.body?.string() ?: "") }
     }
 
