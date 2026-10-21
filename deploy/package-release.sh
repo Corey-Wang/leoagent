@@ -7,7 +7,21 @@ if [[ -e "$destination" ]]; then
   echo "Output directory already exists; select a new directory." >&2
   exit 2
 fi
-cargo build --locked --release --manifest-path "$repo/server/Cargo.toml"
+# Compiler diagnostics/panic strings must not disclose the maintainer's home or checkout.
+python3 - "$repo" <<'PY'
+import os
+from pathlib import Path
+import shlex
+import subprocess
+import sys
+
+env = dict(os.environ)
+encoded = env.get("CARGO_ENCODED_RUSTFLAGS")
+flags = encoded.split("\x1f") if encoded else shlex.split(env.get("RUSTFLAGS", ""))
+flags += [f"--remap-path-prefix={Path.home()}=/build", f"--remap-path-prefix={sys.argv[1]}=/source"]
+env["CARGO_ENCODED_RUSTFLAGS"] = "\x1f".join(flags)
+subprocess.run(["cargo", "build", "--locked", "--release", "--manifest-path", str(Path(sys.argv[1]) / "server/Cargo.toml")], env=env, check=True)
+PY
 mkdir -p "$destination"
 destination="$(cd "$destination" && pwd)"
 stage="$(mktemp -d)"
@@ -24,7 +38,21 @@ mkdir -p "$stage/leoagent/server/helpers"
 cp "$repo/server/helpers/frontwin.swift" "$stage/leoagent/server/helpers/"
 platform="$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
 archive="leoagent-server-$platform.tar.gz"
-tar -czf "$destination/$archive" -C "$stage" leoagent
+# Normalize ownership and omit filesystem extended attributes on every host platform.
+python3 - "$stage" "$destination/$archive" <<'PY'
+from pathlib import Path
+import sys
+import tarfile
+
+def public_metadata(member):
+    member.uid = member.gid = 0
+    member.uname = member.gname = "root"
+    member.pax_headers = {}
+    return member
+
+with tarfile.open(sys.argv[2], "w:gz", format=tarfile.USTAR_FORMAT) as archive:
+    archive.add(Path(sys.argv[1]) / "leoagent", arcname="leoagent", filter=public_metadata)
+PY
 if [[ -n "${2:-}" ]]; then
   sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
   if [[ -z "$sdk" ]]; then
