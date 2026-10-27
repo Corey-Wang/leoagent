@@ -8,9 +8,16 @@ LeoAgent 由两部分组成：**部署在用户电脑上的 Rust 常驻服务**�
 
 项目以电脑长期在线、未休眠为使用前提；不负责远程开机或唤醒。当前主要面向 **macOS + Android**，电脑端暂时没有独立图形界面，也不依赖项目自建的中心云服务。
 
-当前提供 0.x 预发布，仍在面向 1.0 迭代与验收。已完成一次用户授权的 macOS + Codex 最小真实任务，以及 Android 丢响应、进程重启和多设备审批失效验证。锁屏/切网、更多机型、安装升级回滚和远端 CI 仍需补齐验证。1.0 的当前功能与剩余门槛见[验收记录](docs/1.0-readiness.md)。支持范围和验收要求见[技术方案](docs/technical-plan.md)，具体证据见[实施记录](docs/implementation-status.md)。
+当前处于 0.x 迭代阶段，尚未宣布 1.0 就绪。macOS + Codex 最小真实任务，以及 Android 发送回执丢失、进程恢复、多设备审批、浅深色界面和流式重连已有验证；物理手机锁屏/切网、更多机型和完整升级回滚仍需补证据。支持范围见[技术方案](docs/technical-plan.md)，当前验收与剩余门槛见[验收记录](docs/1.0-readiness.md)和[实施记录](docs/implementation-status.md)。
 
-预编译下载：[电脑端 0.1.2（macOS Apple Silicon）](https://github.com/Corey-Wang/leoagent/releases/tag/server-v0.1.2) · [Android 0.1.4（versionCode 5）](https://github.com/Corey-Wang/leoagent/releases/tag/android-v0.1.4)。安装前核对发行页的 `SHA256SUMS`；版本、签名和支持范围见[发布说明](docs/releases.md)。
+**版本与安装入口（2026-10-27 核对）**：
+
+| 组件 | 当前源码 | GitHub 安装包状态 |
+|---|---|---|
+| 电脑端 | 0.1.2 元数据，包含后续桌面续聊与 ACP 初始化修复 | [0.1.2 发行页](https://github.com/Corey-Wang/leoagent/releases/tag/server-v0.1.2)暂无二进制附件 |
+| Android | 0.1.8（versionCode 9） | 0.1.4 发行记录仍为草稿，暂无公开 APK |
+
+新部署请按下方步骤从源码安装。维护者现有自托管服务的「检查更新」通道已发布 Android 0.1.8；其他部署需要自行发布同签名 APK，仓库不会自动为每台电脑提供更新。后续公开下载以 [Releases](https://github.com/Corey-Wang/leoagent/releases) 实际附件为准。版本、签名与更新通道的区别见[发布说明](docs/releases.md)，最近变化见[变更记录](CHANGELOG.md)。
 
 *English summary below.*
 
@@ -36,9 +43,10 @@ TLS 隧道 / 反向代理（Cloudflare Tunnel、Tailscale 等）
 ## 当前功能
 
 - **Agent 对话**：以 Codex（经 `codex-acp`）为主要路径，内置 Claude、DeepSeek、OpenCode、Gemini、Qwen Code、Goose、Kimi、Auggie 的 ACP 启动适配。支持流式输出、工具调用卡片、命令审批、Agent 提问、图片输入和停止任务；具体能力取决于 Agent 及其版本，不代表全部适配均已验证
-- **项目与会话**：按项目管理对话，导入 / 续聊电脑上已有的 Codex 会话，查看 git diff、浏览项目文件、HTML 预览
+- **手机界面**：对话为主界面，项目、会话和设置从左侧抽屉进入；两行输入、浅深主题和输入区上方的固定审批卡片。发送及执行状态显示在回复区域，发送和重连保留已有聊天内容
+- **项目与会话**：按项目管理对话，导入 / 续聊电脑上已有的 Codex 会话，按文件查看项目当前未提交的 Git diff、浏览项目文件、HTML 预览
 - **完整 Markdown**：表格、任务列表、代码高亮、LaTeX 公式
-- **消息**：Agent 完成 / 需要审批 / 提问时记录通知；手机后台服务通过长轮询生成本地通知，不是系统远程推送，App 被系统终止后不保证送达
+- **系统通知**：Agent 完成 / 需要审批 / 提问时，手机后台服务通过长轮询生成本地通知，点击可返回对应对话。App 已移除独立消息中心和底部导航；通知不是系统远程推送，App 被强行停止后不保证送达
 - **画中画**：实时查看 Mac 桌面或前台 App 画面（macOS，需要屏幕录制权限）
 - **语音输入**（可选）：手机录音发往自己的电脑，通过本地 SenseVoice / Paraformer 识别，无需云端语音识别服务
 - **配对与维护**：五分钟一次性邀请，电脑核对验证码并确认后才发放逐设备凭据，Android Keystore 加密保存；支持单设备撤销、App 内检查更新和用户主动上传脱敏日志
@@ -48,23 +56,32 @@ TLS 隧道 / 反向代理（Cloudflare Tunnel、Tailscale 等）
 
 ### 1. 准备依赖并安装电脑端
 
-若使用二进制发行包，优先阅读包内 `START-HERE.md`：不需要 Rust/Cargo，可先执行 `./deploy/install-macos.sh --no-start` 准备文件和配置。以下是源码安装方式。
+当前 GitHub 没有可下载安装的二进制附件，以下使用源码安装。以后若提供二进制包，优先阅读包内 `START-HERE.md`；二进制安装无需 Rust/Cargo。
 
-- Rust / Cargo、Python 3.11+（安装脚本使用 `tomllib`）。
+- Rust / Cargo（CI 使用 Rust 1.92.0）、Python 3.11+（安装脚本使用 `tomllib`）。
 - 至少一个已安装、完成登录或 API 凭据配置的 ACP Agent；安装适配器不等于完成 Agent 授权。
 - 使用下面的 `npm` 安装方式时，需要相应的 Node.js / npm 环境。
 - 截图辅助工具可选用 `swiftc` 构建；语音输入另需模型及相关依赖。
 
-在仓库根目录执行：
+首次获取源码并进入仓库：
+
+```bash
+git clone https://github.com/Corey-Wang/leoagent.git
+cd leoagent
+```
+
+在仓库根目录执行；示例固定为已完成真实任务验收的适配器版本，其他版本需另行验证：
 
 ```bash
 # 示例：安装 Codex 的 ACP 适配器；其他 Agent 按各自文档安装
-npm i -g @zed-industries/codex-acp
+npm i -g @agentclientprotocol/codex-acp@1.13.0
 
 # 构建并安装为当前用户的 launchd 常驻服务
 ./deploy/install-macos.sh
 # 可选：加 --with-stt 安装本地语音识别（下载约 1GB 模型）
 ```
+
+旧包名 `@zed-industries/codex-acp` 已弃用；安装后还需完成 Codex 本身的登录或 API 凭据配置。
 
 默认监听 `127.0.0.1:8737`，首次安装生成配置。旧共享 Token 默认禁用，首次使用应走一次性配对。安装脚本会注册并启动服务；这是用户登录会话内的 LaunchAgent，不是无需登录的系统守护进程，也不会阻止电脑休眠。
 
@@ -87,6 +104,8 @@ cd android
 ./gradlew assembleDebug
 # APK：app/build/outputs/apk/debug/app-debug.apk
 ```
+
+开发包使用本机 debug 签名；已有正式版只能使用同签名 release 包覆盖升级。App 的「检查更新」读取所连接电脑提供的版本，不从 GitHub 自动下载安装。
 
 将 APK 安装到手机，然后在电脑执行：
 
@@ -111,6 +130,12 @@ cd android
 | 卸载常驻服务 | `./deploy/install-macos.sh --uninstall`，保留配置、数据和已安装文件 |
 
 使用其他 Agent 安装路径、Linux 或 Windows 前，请先阅读[已知限制](docs/architecture.md#8-已知限制与迭代重点)。
+
+### 回复等待与初始化故障
+
+手机发送后立即在回复区域显示状态，已收到的文字按流式批次显示；模型产出首段文字前的等待仍取决于模型、推理强度和 Agent 状态，界面修复不会自动降低推理强度。
+
+仅 ACP `initialize` 等待超时时，电脑端会回收本次启动的进程并重试一次；连续失败最多等待约 121 秒，错误会说明阶段、次数和本轮消息未发送。创建/恢复会话或发送提示不会按这个规则自动重试。若任务显示「结果未知」，先查看输出和文件变化，再按提示核对，避免重复执行。
 
 ## 目录
 
@@ -152,10 +177,11 @@ cd android
 
 LeoAgent is a self-hosted bridge between a native Android app and coding agents running on your own computer. The Rust server starts agents over [ACP](https://agentclientprotocol.com) (stdio JSON-RPC); the phone sends tasks and receives streaming events over HTTPS / SSE. Codex via `codex-acp` is the primary path; other built-in adapters depend on each agent's capabilities and version.
 
-* **Deployment**: primarily macOS + Android 8.0+. Keep the computer online and awake. There is no desktop GUI or project-operated central cloud service. `deploy/install-macos.sh` requires Rust and Python 3.11+, and installs a per-user launchd agent.
+* **Versions and installation**: source is Android 0.1.8 (9), with server metadata still at 0.1.2 plus later fixes. As checked on 2026-10-27, the server release has no binary assets and the Android release remains a draft. Build from source for a new installation; an existing self-hosted update channel has 0.1.8, but other deployments must publish their own signed APK. See [release status](docs/releases.md).
+* **Deployment**: primarily macOS + Android 8.0+. Keep the computer online and awake. There is no desktop GUI or project-operated central cloud service. Source installation requires Rust and Python 3.11+, and installs a per-user launchd agent. The Codex adapter package is `@agentclientprotocol/codex-acp`; the example above pins the verified 1.13.0 version.
 * **Connection**: configure a TLS tunnel / reverse proxy yourself, set `public_url` in `~/.config/leoagent/config.toml`, then run `leoagent-server pair`. The link is a five-minute invitation; local computer confirmation grants a revocable device credential.
-* **Features**: streaming chat, approvals, questions, images, project/session management, Git diff, file previews, Markdown/LaTeX, screen PiP (macOS), and optional local speech recognition.
-* **Limits**: background notifications use Android foreground-service polling, not remote push. Event replay supports reconnects, but automatic recovery of in-flight tasks after a server restart is not implemented. The phone currently stores one server connection.
+* **Features**: streaming chat, approvals, questions, images, project/session management, Git diff, file previews, Markdown/LaTeX, screen PiP (macOS), and optional local speech recognition. The app uses a conversation-first layout with drawer navigation, two-row input and execution status inside replies; sending and reconnecting retain the visible conversation.
+* **Limits**: background notifications use Android foreground-service polling, not remote push; there is no separate message center. Event replay supports reconnects. After a server restart, undispatched tasks fail and dispatched tasks without a terminal record remain unknown; they do not resume automatically. The phone currently stores one server connection. Retrying a timed-out ACP initialization never retries a prompt or guarantees shorter model response time.
 * **Desktop sync** is experimental and disabled by default; it uses an undocumented Codex IPC socket. See [desktop-sync.md](docs/desktop-sync.md).
 * **Details**: [architecture](docs/architecture.md), [API](docs/api.md), [Android build](docs/build-android.md). License: [Apache-2.0](LICENSE); third-party notices: [NOTICE](NOTICE).
 

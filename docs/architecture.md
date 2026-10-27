@@ -17,7 +17,7 @@ LeoAgent 的核心是两个部分：
 
 ```text
 用户手机：Android App（Kotlin / 原生 View）
-  ├── Agent 对话、项目与会话、消息、设置
+  ├── 对话主界面；左侧抽屉：项目、会话、设置
   ├── 文件预览、桌面画中画、语音录入
   │
   │ HTTPS + 设备凭据：发送任务、停止、审批、查询
@@ -53,7 +53,7 @@ LeoAgent 的核心是两个部分：
 
 | 文件 | 职责 |
 |---|---|
-| [MainActivity.kt](../android/app/src/main/java/io/leoagent/app/MainActivity.kt) | Agent、消息、设置三个主入口，通知列表与跳转 |
+| [MainActivity.kt](../android/app/src/main/java/io/leoagent/app/MainActivity.kt) | 对话主界面、从抽屉打开设置、系统通知跳转；无底部导航或独立消息中心 |
 | [CodexPane.kt](../android/app/src/main/java/io/leoagent/app/CodexPane.kt) | 对话主逻辑：项目/会话选择、模型配置、流式展示、工具卡片、审批、提问、图片和 diff |
 | [CodexApi.kt](../android/app/src/main/java/io/leoagent/app/CodexApi.kt) | `Cx` API 包装与 `CxPrefs` 会话/偏好存储；名称虽带 Codex，也用于其他 Agent |
 | [Http.kt](../android/app/src/main/java/io/leoagent/app/Http.kt)、[Net.kt](../android/app/src/main/java/io/leoagent/app/Net.kt) | 普通请求和 SSE 统一 OkHttp；写操作关闭自动重试，授权请求不自动跟随重定向 |
@@ -105,9 +105,9 @@ LeoAgent 的核心是两个部分：
 1. **配对**：电脑端通过本机管理 socket 创建五分钟一次性邀请；手机兑换后显示验证码，电脑核对并确认，服务端再生成逐设备凭据。邀请原子消费，不能由健康接口生成长期凭据。
 2. **选择项目与会话**：手机调用 `/api/projects`、`/api/sessions`。项目指向电脑目录，会话记录使用的 Agent、模型、模式和 ACP 会话 ID。
 3. **提交消息**：当前 Android 通过 `AgentRepository` 保存操作 ID 和原始参数，调用 `POST /api/v1/sessions/:id/tasks` 并携带数据代数；电脑通过事务创建任务、占用项目、记录用户事件及回执，再启动执行。响应丢失后查询原回执，相同操作重试返回原回执。旧 `/api/sessions/:id/prompt` 仍为兼容入口；不提供操作 ID 的旧客户端只有互斥保护，不能获得跨重试去重保证。
-4. **取得 Agent**：`orch::get_agent` 复用存活进程，否则按项目目录启动 ACP 子进程，记录运行进程身份，发送 `initialize`，根据协商能力恢复历史或创建新会话。旧会话无法恢复会明确失败，不再静默创建新上下文。默认通常是一个活动会话对应一个 ACP 进程。
+4. **取得 Agent**：`orch::get_agent` 优先使用已附着的桌面后端或存活 ACP 进程，否则按项目目录启动 ACP 子进程，记录运行进程身份并发送 `initialize`。只有初始化本地超时才回收该进程并重试一次，不重试 `session/new`、`session/load` 或 `session/prompt`；重试前检查原任务取消状态。初始化后根据协商能力恢复历史或创建新会话；无法恢复旧会话时明确失败，不静默创建新上下文。默认通常是一个活动会话对应一个 ACP 进程。
 5. **执行与记录**：电脑发送 `session/prompt`。`runtime.rs` 将回答、思考、工具调用、计划和审批等转为应用事件，`events.rs` 合并文本片段后写入 SQLite。
-6. **流式显示**：手机读取 `/api/v1/sessions/:id/snapshot` 后订阅 `/api/v1/sessions/:id/stream?after=N`，按序号处理事件。连续连接失败时退回 `/api/v1/sessions/:id/events?after=N&wait=20` 长轮询，之后定期重试 SSE；收到 reset 或代数变化重新取快照。
+6. **流式显示**：手机读取 `/api/v1/sessions/:id/snapshot` 后订阅 `/api/v1/sessions/:id/stream?after=N`，按序号处理事件。发送复用活动连接；同一数据代数内重连保留聊天视图，从原显示游标补事件，不提前跳到快照的全局游标。收到文字后合并渲染当前全文，终态先同步末尾文字。连续连接失败时退回 `/api/v1/sessions/:id/events?after=N&wait=20` 长轮询，之后定期重试 SSE；游标失效或代数变化重新获取快照并重建。
 7. **人工交互**：审批和提问调用 `/api/v1/interactions/:id/respond`，通过持久操作 ID 与回执处理重试，由电脑回传给对应 Agent。旧 `/api/perm/:rid`、`/api/ask/:rid` 为兼容入口。
 8. **结束与通知**：电脑记录回合结束事件及通知；手机聊天页更新状态，Android 前台服务通过 `/api/notify` 取通知。用户停止任务时调用 `/api/v1/tasks/:id/cancel`，电脑请求 ACP `session/cancel`；是否已停止仍以任务状态和证据为准。
 

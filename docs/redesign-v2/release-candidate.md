@@ -2,7 +2,7 @@
 
 用户确认 A「静默协作」并完成本地候选验收后，本轮明确回复「发布」。现有「检查更新」通道已更新为 0.1.7（8）；版本接口与完整 APK 下载校验通过。
 
-[正式签名安装包](artifacts/LeoAgent-0.1.7.apk) · [覆盖升级验证](release/upgrade-verification.json) · [包名与签名校验](release/signature-verification.json) · [源码与构建记录](release/BUILD-INFO.json)
+安装包仅保存在本机 `android/app/build/outputs/update-candidate/0.1.7/`，不纳入源码仓库；当前版本与实际下载状态见 [发布说明](../releases.md)。[覆盖升级验证](release/upgrade-verification.json) · [包名与签名校验](release/signature-verification.json) · [源码与构建记录](release/BUILD-INFO.json)
 
 ## 安装包
 

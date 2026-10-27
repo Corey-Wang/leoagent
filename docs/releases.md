@@ -1,15 +1,19 @@
 # 版本与发行产物
 
-电脑端与 Android 独立使用 SemVer 版本；Git 标签添加组件前缀，准确对应各自版本文件。0.x 当前在 GitHub 标记为 **Pre-release**；1.0 验收仍在进行。本地检查不代表 GitHub CI 已执行，也不代表 Linux 或所有 Agent 已验证。
+电脑端与 Android 独立使用 SemVer 版本；Git 标签添加组件前缀，准确对应各自版本文件。0.x 按预发布管理，1.0 验收仍在进行。本地构建、源码推送、自托管更新通道和 GitHub Release 附件是不同的发布状态。
 
-| 组件 | 版本来源 | 当前标签 / 下载 | 主要产物 |
+截至 2026-10-27，通过 GitHub Releases API 核对的状态：
+
+| 组件 | 当前源码 | GitHub 发行记录 | 公开安装包 |
 |---|---|---|---|
-| 电脑端 | `server/Cargo.toml` | [server-v0.1.2](https://github.com/Corey-Wang/leoagent/releases/tag/server-v0.1.2) | `leoagent-server-0.1.2-darwin-arm64.tar.gz` |
-| Android | `android/version.properties` | [android-v0.1.4](https://github.com/Corey-Wang/leoagent/releases/tag/android-v0.1.4) | `leoagent-android-0.1.4.apk`（versionCode 5） |
+| 电脑端 | `server/Cargo.toml`：0.1.2，包含后续修复 | [server-v0.1.2](https://github.com/Corey-Wang/leoagent/releases/tag/server-v0.1.2) 为公开预发布记录 | 附件为空 |
+| Android | `android/version.properties`：0.1.8（9） | android-v0.1.4（5）仍为草稿 | 未公开 APK 附件 |
 
-这两个版本配套使用。电脑端目前仅提供 macOS Apple Silicon 的默认功能构建；实验桌面同步默认未编入。每个 Release 附带 `SHA256SUMS` 和 `BUILD-INFO.json`，记录源码提交、组件版本和产物校验和；Android 另附 `APK-SIGNING.txt`，仅含公开证书信息。
+当前新部署应从源码构建；下文的 0.1.5–0.1.8 记录是维护者现有服务的 App 更新通道，不等于 GitHub 已提供这些版本的公开下载。GitHub 自动生成的 Source code 压缩包只有源码。最新状态以 [Releases](https://github.com/Corey-Wang/leoagent/releases) 实际附件为准；当前源码还包含公开旧标签之后的桌面续聊与初始化修复。
 
-下载产物与校验文件到同一目录，核对后安装：
+已经本地核验的电脑端发行包为 macOS Apple Silicon 默认功能构建，实验桌面同步未编入。以后公开发行包应附 `SHA256SUMS` 和 `BUILD-INFO.json`，记录源码提交、组件版本和产物校验和；Android 另附 `APK-SIGNING.txt`，仅含公开证书信息。
+
+取得发行产物与校验文件后，放在同一目录核对再安装：
 
 ```bash
 shasum -a 256 -c SHA256SUMS
@@ -45,7 +49,7 @@ A「静默协作」使用 `versionName=0.1.7`、`versionCode=8`。正式签名�
 
 本次 A「清晰工作台」改版使用 `versionName=0.1.5`、`versionCode=6`。2026-10-24 经用户明确授权，已发布到当前电脑的 App「检查更新」通道。`assembleRelease`、`lintRelease` 通过，正式包签名与原 0.1.4 一致；版本接口返回 0.1.5（6），完整下载的 APK SHA-256 为 `412b45c6a4520804a74ba937cc9abc0cbddd2deec5b02320684743eb7ddc1bb6`，与构建产物一致。
 
-原 0.1.4 APK 和版本元数据备份在 `~/.local/share/leoagent/backups/android-0.1.4-to-0.1.5-20261024T001022307129Z/`，附校验文件。安装包、升级元数据及发布核验记录位于 `android/app/build/outputs/update-candidate/0.1.5/`。服务配置和配对凭据保持不变，未重启服务；手机需在「设置 → 检查更新」自行安装。GitHub 公开发行仍为上表的 0.1.4，本次未创建 GitHub 标签或发行版。
+原 0.1.4 APK 和版本元数据备份在 `~/.local/share/leoagent/backups/android-0.1.4-to-0.1.5-20261024T001022307129Z/`，附校验文件。安装包、升级元数据及发布核验记录位于 `android/app/build/outputs/update-candidate/0.1.5/`。服务配置和配对凭据保持不变，未重启服务；手机需在「设置 → 检查更新」自行安装。本次未创建 GitHub 标签或发行版，也未上传公开 APK 附件。
 
 ## 后续版本规则
 
