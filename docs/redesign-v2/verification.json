@@ -1,0 +1,147 @@
+{
+  "date": "2026-10-26",
+  "scope": "Offline HTML prototypes only; no native/backend integration claimed",
+  "directions": [
+    {
+      "direction": 1,
+      "four_independent_device_roots": true,
+      "approve_waits_for_receipt": true,
+      "mobile": {
+        "390": {
+          "overflow": false,
+          "approval_visible": true,
+          "button_height": 48.39
+        },
+        "375": {
+          "overflow": false,
+          "approval_visible": true,
+          "button_height": 48.39
+        },
+        "320": {
+          "overflow": false,
+          "approval_visible": true,
+          "button_height": 48.39
+        }
+      },
+      "pageerrors": [],
+      "external_requests": [],
+      "author_report": {
+        "checks": [
+          "draft survives navigation; sent user content escaped",
+          "approval changes only one device; waits for computer receipt",
+          "deny confirmation and explicit retained changes",
+          "session search and unknown outcome route",
+          "file evidence toggles",
+          "notification toggle, connection and pair are explicit offline demos; Escape closes sheet"
+        ],
+        "pageerrors": [],
+        "http_requests": [],
+        "mobile": {
+          "390": {
+            "horizontal_overflow": false,
+            "approval_visible": true,
+            "approval_target_height": 48.390625
+          },
+          "375": {
+            "horizontal_overflow": false,
+            "approval_visible": true,
+            "approval_target_height": 48.390625
+          },
+          "320": {
+            "horizontal_overflow": false,
+            "approval_visible": true,
+            "approval_target_height": 48.390625
+          }
+        }
+      }
+    },
+    {
+      "direction": 2,
+      "four_independent_device_roots": true,
+      "approve_waits_for_receipt": true,
+      "mobile": {
+        "390": {
+          "overflow": false,
+          "approval_visible": true,
+          "button_height": 48
+        },
+        "375": {
+          "overflow": false,
+          "approval_visible": true,
+          "button_height": 48
+        },
+        "320": {
+          "overflow": false,
+          "approval_visible": true,
+          "button_height": 48
+        }
+      },
+      "pageerrors": [],
+      "external_requests": [],
+      "author_report": {
+        "approval_and_device_isolation": true,
+        "draft_survives_navigation": true,
+        "deny_confirmation": true,
+        "input_escaped": true,
+        "search_unknown_and_diff": true,
+        "settings_pairing_escape": true,
+        "mobile_390": true,
+        "mobile_375": true,
+        "mobile_320": true,
+        "phone_only": true,
+        "page_errors": [],
+        "external_requests": []
+      }
+    },
+    {
+      "direction": 3,
+      "four_independent_device_roots": true,
+      "approve_waits_for_receipt": true,
+      "mobile": {
+        "390": {
+          "overflow": false,
+          "approval_visible": true,
+          "button_height": 48
+        },
+        "375": {
+          "overflow": false,
+          "approval_visible": true,
+          "button_height": 48
+        },
+        "320": {
+          "overflow": false,
+          "approval_visible": true,
+          "button_height": 48
+        }
+      },
+      "pageerrors": [],
+      "external_requests": [],
+      "author_report": "Direction author reports actual clicks passed: rejection, state isolation, draft retention, escaping, search, unknown result verification, file expansion, settings and pairing, Escape."
+    }
+  ],
+  "overview": {
+    "images_loaded": true,
+    "local_links_resolve": true,
+    "mobile_without_overflow": [
+      375,
+      320
+    ],
+    "images_embedded_in_html": true,
+    "final_pageerrors": []
+  },
+  "final_recheck": {
+    "direction_1_narrow_phone_preview_fixed": true,
+    "direction_1_toolbar_uses_conversation_title": true,
+    "approval_and_widths": [
+      390,
+      375,
+      320
+    ],
+    "overview_screenshots_refreshed": true,
+    "pageerrors": []
+  },
+  "design_lint": {
+    "red_issues": 0,
+    "remaining_yellow": "Native system fonts; monospace for actual command and diff text."
+  }
+}

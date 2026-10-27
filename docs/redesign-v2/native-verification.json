@@ -1,0 +1,275 @@
+{
+  "date": "2026-10-26",
+  "direction": "A 静默协作",
+  "result": "passed",
+  "environment": {
+    "avd": "leoagent-redesign-v2",
+    "serial": "emulator-5562",
+    "android": 34,
+    "abi": "arm64-v8a",
+    "displayRuns": [
+      {
+        "pixels": [
+          1080,
+          2400
+        ],
+        "densityDpi": 420,
+        "widthDp": 411.43,
+        "scope": "redesign plus pairing, Keystore, Markdown and real touch prerequisites"
+      },
+      {
+        "pixels": [
+          840,
+          1920
+        ],
+        "densityDpi": 420,
+        "widthDp": 320,
+        "scope": "full isolated integration including recovery and notifications"
+      }
+    ],
+    "applicationId": "io.leoagent.app.verification",
+    "server": "temporary Rust service, config, SQLite and project",
+    "agent": "deterministic ACP fixture, no real agent",
+    "diff": "real temporary Git commit plus uncommitted Review.kt change"
+  },
+  "commands": [
+    {
+      "command": "cargo build --manifest-path server/Cargo.toml",
+      "result": "passed"
+    },
+    {
+      "command": "cd android && ./gradlew -Pleoagent.verification :app:assembleDebug :app:assembleDebugAndroidTest",
+      "result": "passed",
+      "evidence": "android-verification-build.txt"
+    },
+    {
+      "command": "cd android && ./gradlew -Pleoagent.verification :app:lintDebug",
+      "result": "passed",
+      "evidence": "android-lint.txt"
+    },
+    {
+      "command": "LEOAGENT_TEST_EMULATOR=emulator-5562 LEOAGENT_ANDROID_REDESIGN_ONLY=1 python3 -u tests/android_integration.py",
+      "result": "passed",
+      "evidence": "native-verification.txt"
+    },
+    {
+      "command": "adb -s emulator-5562 shell wm size 840x1920; LEOAGENT_TEST_EMULATOR=emulator-5562 python3 -u tests/android_integration.py",
+      "result": "passed",
+      "evidence": "native-verification-320dp.txt",
+      "note": "display override on task-created emulator only; reset after run"
+    },
+    {
+      "command": "cd android && ./gradlew :app:assembleDebug",
+      "result": "passed",
+      "evidence": "android-build.txt"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "behaviorEvidence": [
+    "real touchscreen send through HTTP and SSE",
+    "voice/text toggle via real touch, without recording",
+    "48dp touch targets and complete inline approval visibility",
+    "reject is left of allow; rejection remains pending until confirmation",
+    "all provider approval options accessible",
+    "stale approval removed after remote response",
+    "real file diff load, collapse hides patch, expand restores patch (final 411dp run)",
+    "session search, settings roundtrip, draft retained, activity recreation",
+    "full 320dp recovery faults: before send, after 401, after 404; original operation and body, exactly one ACP dispatch",
+    "notification allowed and denied branches"
+  ],
+  "logs": {
+    "native-verification.txt": {
+      "result": "passed",
+      "passLines": [
+        "PASS: toolbar-touch-reproduce touchscreen first tap and keyboard behavior",
+        "PASS: toolbar-touch touchscreen first tap and keyboard behavior",
+        "PASS: readable Markdown tables and code in light/dark themes; rendered PNGs saved in cache",
+        "PASS: old credential migration and legacy QR settings/save retain encrypted credentials",
+        "PASS: legacy upgrade compatibility",
+        "PASS: real Android Keystore, encrypted credential storage, local pairing and HTTP task submission",
+        "PASS: Android Keystore round-trip, tamper rejection and saved credentials after process recreation",
+        "PASS: redesign-light real native send, allow/reject, stale approval cleanup, 320dp row, contrast and screenshots",
+        "PASS: redesign-dark real native send, allow/reject, stale approval cleanup, 320dp row, contrast and screenshots"
+      ]
+    },
+    "native-verification-320dp.txt": {
+      "result": "passed",
+      "passLines": [
+        "PASS: toolbar-touch-reproduce touchscreen first tap and keyboard behavior",
+        "PASS: toolbar-touch touchscreen first tap and keyboard behavior",
+        "PASS: readable Markdown tables and code in light/dark themes; rendered PNGs saved in cache",
+        "PASS: old credential migration and legacy QR settings/save retain encrypted credentials",
+        "PASS: legacy upgrade compatibility",
+        "PASS: real Android Keystore, encrypted credential storage, local pairing and HTTP task submission",
+        "PASS: Android Keystore round-trip, tamper rejection and saved credentials after process recreation",
+        "PASS: lose-send with original durable operation",
+        "PASS: recover-send with original durable operation",
+        "PASS: Android after-404, process death, same operation/body, exactly one real ACP dispatch",
+        "PASS: lose-send with original durable operation",
+        "PASS: recover-send with original durable operation",
+        "PASS: Android after-401, process death, same operation/body, exactly one real ACP dispatch",
+        "PASS: lose-send with original durable operation",
+        "PASS: recover-send with original durable operation",
+        "PASS: Android before, process death, same operation/body, exactly one real ACP dispatch",
+        "PASS: second device answered, Android rejected receipt clears pending operation",
+        "PASS: notifications background service, delivery cursor, settings navigation and notification behavior",
+        "PASS: notifications-denied background service, delivery cursor, settings navigation and notification behavior",
+        "PASS: redesign-light real native send, allow/reject, stale approval cleanup, 320dp row, contrast and screenshots",
+        "PASS: redesign-dark real native send, allow/reject, stale approval cleanup, 320dp row, contrast and screenshots"
+      ]
+    }
+  },
+  "artifacts": [
+    {
+      "path": "artifacts/LeoAgent-A-debug.apk",
+      "bytes": 7376201,
+      "sha256": "c7e912396072ad1cea7619580e017cd0d14b772c723ab154d2e91ec7b14184ee"
+    },
+    {
+      "path": "artifacts/LeoAgent-A-verification-test.apk",
+      "bytes": 69810,
+      "sha256": "4632d5f84d7cf3489ff0469a53125ce1be79866e6916ec4fca92bd903e754913"
+    },
+    {
+      "path": "artifacts/LeoAgent-A-verification.apk",
+      "bytes": 7376213,
+      "sha256": "ae5282394d7cfc39ab2a3b83f18c28ac2bb0bb512ea43428050750c0c6df181c"
+    }
+  ],
+  "screenshots": {
+    "native/320dp/redesign-dark-approval.png": {
+      "bytes": 133054,
+      "sha256": "f6a5050773a5b9170242582d8cc991527dc05af619668874263928b58854592e"
+    },
+    "native/320dp/redesign-dark-chat.png": {
+      "bytes": 110261,
+      "sha256": "92a3926ada282f334ec2899f3fb9f6bf7a88744fa2a9bb70cb29b1bbae018d58"
+    },
+    "native/320dp/redesign-dark-details.png": {
+      "bytes": 114195,
+      "sha256": "d29e8bb6453bbdfc0a7e4e8decdd696888654880e17da3bb0c6e1cabdf15d9fb"
+    },
+    "native/320dp/redesign-dark-files.png": {
+      "bytes": 110357,
+      "sha256": "e5eb8ac22d68924398edf919ec944d8b9f32239f0b731e6fd1805dad5e81cf4a"
+    },
+    "native/320dp/redesign-dark-projects.png": {
+      "bytes": 126631,
+      "sha256": "41aa8a67e76dcca45438f9bac13d70467bf8f5ffd1c84b5326602bbda2f10efd"
+    },
+    "native/320dp/redesign-dark-settings.png": {
+      "bytes": 124519,
+      "sha256": "408bbf205776846494690b6c372bb62de9655b58551a1986a5a4bfb41f471a45"
+    },
+    "native/320dp/redesign-light-approval.png": {
+      "bytes": 131854,
+      "sha256": "7c6dae55f0d09a8cb5de55e0cd62b9f3cfe90d2ea80b3e0b3b5f16e6e4f3b458"
+    },
+    "native/320dp/redesign-light-chat.png": {
+      "bytes": 109762,
+      "sha256": "53b51cc70215ef293534aa3158fd5f83de4cdb11e74a305aab6a9e3c88de7bd0"
+    },
+    "native/320dp/redesign-light-details.png": {
+      "bytes": 110982,
+      "sha256": "80d9f8a1b7ec36078bee9829bcbe726d49d0b6516cd4b259bb479dc61b7f87ec"
+    },
+    "native/320dp/redesign-light-files.png": {
+      "bytes": 110536,
+      "sha256": "5259ca6e8564770825998b41b6397af7dee0f3485871438233e066ab2ab912f5"
+    },
+    "native/320dp/redesign-light-projects.png": {
+      "bytes": 122120,
+      "sha256": "1d5923562bb8e057528b17c036a42ee945e25ed1f8336b44c500c83a3b889072"
+    },
+    "native/320dp/redesign-light-settings.png": {
+      "bytes": 140727,
+      "sha256": "ae1f70c59e8e1086b3b47b4b8079e9439eb3e5f0726e3435ee8cf9ba65a50d15"
+    },
+    "native/redesign-dark-approval.png": {
+      "bytes": 129300,
+      "sha256": "acb69859f091a6524abaa605e7b0d0a4f5493028fdc6100ef51c09518d4f27b4"
+    },
+    "native/redesign-dark-chat.png": {
+      "bytes": 108438,
+      "sha256": "ee260d673a42cd1ad056729b342f817f6d73995483f5a500604c9279f596bd76"
+    },
+    "native/redesign-dark-details.png": {
+      "bytes": 117712,
+      "sha256": "32dff78376c9c0acb452825bcf54f61466870346fafed02f28967b3746cc85e3"
+    },
+    "native/redesign-dark-files.png": {
+      "bytes": 115152,
+      "sha256": "5472057955edc985da18c656847646b6e07cba32c2eb7e0527f5fe6b5ff4df1a"
+    },
+    "native/redesign-dark-projects.png": {
+      "bytes": 126809,
+      "sha256": "d3959e1b5a134ff95b6167b8e507164c6ed0a8cda8c4bbf3c6b9197304c590be"
+    },
+    "native/redesign-dark-settings.png": {
+      "bytes": 153248,
+      "sha256": "af5be0221b68c1ae8046e552e9fa2031278911cd8e4f5b5d676c05159facc247"
+    },
+    "native/redesign-light-approval.png": {
+      "bytes": 127393,
+      "sha256": "cc777b7284b8eccd43c79e9239aa73266ac249092dc718784804d5adb6094c79"
+    },
+    "native/redesign-light-chat.png": {
+      "bytes": 107120,
+      "sha256": "4b44c822f5ca5908cb9865efbd02a0d0dc1b5c846ca83c050875509ffdaff316"
+    },
+    "native/redesign-light-details.png": {
+      "bytes": 114293,
+      "sha256": "c5159da290c58cd4665a20b21a30453c921a7e889896200d9cddbe796c11cd95"
+    },
+    "native/redesign-light-files.png": {
+      "bytes": 114658,
+      "sha256": "758e741b048bec355742026016e38bcadac35f623b2cfa06269ab470f875afff"
+    },
+    "native/redesign-light-projects.png": {
+      "bytes": 108647,
+      "sha256": "d2ca4c5e9d0aa98af4ca2a90b1b80830456f51166bea5f8757e7ed3e677e4dcd"
+    },
+    "native/redesign-light-settings.png": {
+      "bytes": 160099,
+      "sha256": "77d90aa24f3c58c3214dd5cd09c979a7398f6d37e7eb4f9ad883d559e8821376"
+    }
+  },
+  "gallery": {
+    "path": "native/index.html",
+    "screens": 6,
+    "themes": [
+      "light",
+      "dark"
+    ],
+    "widths": [
+      "411dp",
+      "320dp"
+    ],
+    "browserVerified": true,
+    "width375Overflow": false,
+    "pageErrors": 0,
+    "warnings": [
+      "gallery intentionally uses relative screenshots as a multi-file deliverable",
+      "system font follows the Android product"
+    ]
+  },
+  "cleanup": {
+    "verificationPackagesRemoved": true,
+    "adbReverseRemoved": true,
+    "temporaryServerAndFixtureTerminated": true,
+    "emulator5562Stopped": true,
+    "createdAvdRemoved": true,
+    "existingEmulator5554Untouched": true
+  },
+  "limits": [
+    "No deployment or update publication",
+    "Ordinary debug APK built but not installed; debug signature may differ from installed release",
+    "Integration ran the same source under a separate verification application ID",
+    "No physical device validation",
+    "No real agent execution, microphone recognition, attachment upload or remote PiP stream test",
+    "Existing unrelated workspace changes retained; source-provenance.json compares pre-task working files"
+  ]
+}

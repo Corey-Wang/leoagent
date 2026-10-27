@@ -23,14 +23,10 @@ class SettingsActivity : AppCompatActivity() {
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
         val l = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(8), 0, dp(40)) }
-        l.addView(UI.text(this, "‹ 设置", 17f, R.color.primary).apply {
-            setPadding(dp(16), dp(14), dp(16), dp(8))
-            contentDescription = "返回设置"
-            isClickable = true; isFocusable = true; isFocusableInTouchMode = false
-            foreground = UI.focusForeground(context, DS.R_SM)
-            setOnClickListener { finish() }
-        })
-        UI.largeTitle(this, l, "连接电脑")
+        val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL; setPadding(dp(4), 0, dp(16), dp(8)) }
+        bar.addView(UI.icon(this, R.drawable.ms_chevron_left).apply { contentDescription = "返回设置"; setOnClickListener { finish() } }, LinearLayout.LayoutParams(dp(48), dp(48)))
+        bar.addView(UI.text(this, "连接设置", 17f, R.color.text, true)); l.addView(bar)
+        UI.largeTitle(this, l, "连接电脑", "在电脑确认配对后，即可远程继续任务")
         val g = UI.group(this, l, "连接")
         fun field(label: String, v: String, hint: String): EditText {
             if (g.childCount > 0) g.addView(android.view.View(this).apply { setBackgroundColor(UI.col(context, R.color.border)) }, LinearLayout.LayoutParams(MATCH_PARENT, maxOf(1, dp(1) / 2)).apply { leftMargin = dp(16) })
@@ -40,12 +36,13 @@ class SettingsActivity : AppCompatActivity() {
             r.addView(labelView)
             val e = EditText(this).apply {
                 id = View.generateViewId()
-                labelFor = labelView.id
-                setText(v); this.hint = hint; background = null; textSize = 16f; isSingleLine = true
-                setTextColor(UI.col(context, R.color.text)); setPadding(0, dp(4), 0, dp(6))
+                setText(v); this.hint = hint; background = UI.outline(context, R.color.surface2, 12); textSize = 16f; isSingleLine = true
+                setTextColor(UI.col(context, R.color.text)); setPadding(dp(12), dp(8), dp(12), dp(8))
                 contentDescription = label
                 minHeight = dp(DS.TOUCH)
             }
+            labelView.labelFor = e.id
+            e.setHintTextColor(UI.col(this, R.color.muted))
             r.addView(e); g.addView(r); return e
         }
         url = field("服务器地址", Prefs.url(this), "https://your-host.example.com")

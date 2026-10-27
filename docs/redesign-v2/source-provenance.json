@@ -1,0 +1,50 @@
+{
+  "baselineType": "pre-task working files, not Git HEAD",
+  "baselineLocation": "$TMPDIR/leoagent-redesign-v2-baseline-flbek0_3",
+  "files": {
+    "android/app/src/main/java/io/leoagent/app/CodexPane.kt": {
+      "beforeSha256": "0269e5e33b68cafdbbc63c66869ee1ccbb33198c9a430a4524a7838f5b592873",
+      "afterSha256": "78bbec0873dcef715a38c6f2ff95d791604ba980139e0362f493d4f8e3b37995"
+    },
+    "android/app/src/main/java/io/leoagent/app/UI.kt": {
+      "beforeSha256": "f2392dbcd3599722750cf11fd17922b3a5cf188f7a6bbc63f7c64c92f282db28",
+      "afterSha256": "c30848f168c1c44a34ae62af20e51e26e014525c672c2abf30a09f051eef2b9e"
+    },
+    "android/app/src/main/java/io/leoagent/app/VoiceInput.kt": {
+      "beforeSha256": "dc951aeffda7856582f4d5e4e18e24d83a99e53bcf5614bb25e9067695ef6e56",
+      "afterSha256": "d84d3eb7c0fb65894211d1cb2eca37270c274b57adccbc29362705c5478142f7"
+    },
+    "android/app/src/main/java/io/leoagent/app/MainActivity.kt": {
+      "beforeSha256": "544292f229951d04a4590c5956378494df1344e15601e57e236346e3381e9706",
+      "afterSha256": "7f4e6832125d1bb876941a66a612dd6e4d62a7cb3d350cb129436c7551fdb8f7"
+    },
+    "android/app/src/main/java/io/leoagent/app/SettingsActivity.kt": {
+      "beforeSha256": "6266c43d6cdf7a1a64373d9e5d50f683b917411b34def5c44e2a6565915e0bc1",
+      "afterSha256": "80e605f07dffce4482b1edd4b39bbde318e3ad931c41620bcb377b9121642562"
+    },
+    "android/app/src/main/res/values/colors.xml": {
+      "beforeSha256": "b821c7010139648758900adc4e31afe6362b4c995e17bca62110a94a5ff78828",
+      "afterSha256": "52da96ace7a1ef5cccbd071dea2cac5e1144e2a045e4ed308f95040963e3c2a8"
+    },
+    "android/app/src/main/res/values-night/colors.xml": {
+      "beforeSha256": "59f10ec0d8c3a8eb7a7fce0ce2ca40c9422d27dd36e4722ba268073b9a0d2df8",
+      "afterSha256": "eaa3ad872a5bc0d8d84854faa5c37674ca96c90ae70620142bf69271f26e1ebd"
+    },
+    "android/app/src/androidTest/java/io/leoagent/app/RedesignChecks.kt": {
+      "beforeSha256": "0626e2fa9a07a4ae5eeb85a0cf96e86cae5600dc5c0bde5229714a6b1eb75073",
+      "afterSha256": "505f351ca12d3fbfd7d533accb986de32452ee423edf480886d187d14d89e31f"
+    },
+    "android/app/src/androidTest/java/io/leoagent/app/ToolbarTouchChecks.kt": {
+      "beforeSha256": "e6959ecbeee865ba6f014321284a797790a55cb479a6626897aa95f808f0a864",
+      "afterSha256": "695b58c39117c23d00918aae3741dd3db237fa25c3d7b28d2b12bd200446f473"
+    },
+    "tests/android_integration.py": {
+      "beforeSha256": "30929357bc9f829b7f37314581621ff4c0f82da6b5f0650e853999dfaaad965d",
+      "afterSha256": "85cd2d7a73541c990073cd4aa5618c1ee6cc86937e13a547c161af5c7a7a52a7"
+    },
+    "docs/ui-design.md": {
+      "beforeSha256": "a120a069aecffc3167926634820b669162aa77079113da3eaac6bd294197cf74",
+      "afterSha256": "7f740779a9ff9fb7accc038abac3409cb33d6c42c39ad56f557f7a69d7acba44"
+    }
+  }
+}

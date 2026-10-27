@@ -11,6 +11,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 
 from integration import ROOT, BINARY, wait
@@ -18,6 +19,7 @@ from fixtures.http_fault_proxy import FaultProxy
 
 
 def main():
+    stream_only = os.environ.get("LEOAGENT_ANDROID_STREAM_ONLY") == "1"
     sdk = Path(os.environ.get("ANDROID_HOME", Path.home() / "Library/Android/sdk"))
     adb = str(sdk / "platform-tools/adb")
     serial = os.environ.get("LEOAGENT_TEST_EMULATOR", "emulator-5554")
@@ -64,7 +66,8 @@ def main():
             phone_url = f"http://127.0.0.1:{proxy.port}"
             def instrument(*extra):
                 output = device("shell", "am", "instrument", "-w", "-e", "base_url", phone_url,
-                                *extra, f"{test}/io.leoagent.app.SecurityInstrumentation", timeout=45)
+                                *extra, f"{test}/io.leoagent.app.SecurityInstrumentation",
+                                timeout=90 if any(v.startswith("redesign-") for v in extra) else 45)
                 assert "PASS:" in output and "FAIL:" not in output, output
                 print(output.strip())
             def receipt(operation):
@@ -95,10 +98,11 @@ def main():
                 for apk, name in zip(apks, (app, test)):
                     device("install", str(apk), timeout=60)
                     installed.append(name)
-                instrument("-e", "scenario", "toolbar-touch-reproduce")
-                instrument("-e", "scenario", "toolbar-touch")
-                instrument("-e", "scenario", "markdown-theme")
-                instrument("-e", "scenario", "legacy-link")
+                if not stream_only:
+                    instrument("-e", "scenario", "toolbar-touch-reproduce")
+                    instrument("-e", "scenario", "toolbar-touch")
+                    instrument("-e", "scenario", "markdown-theme")
+                    instrument("-e", "scenario", "legacy-link")
                 # Close the real Settings/Main activities before repository-only fault tests.
                 device("shell", "am", "force-stop", app)
                 invitation = local("pair")
@@ -115,79 +119,125 @@ def main():
                 device("shell", "am", "force-stop", app)
                 instrument()
                 assert len(journal.read_text().splitlines()) == 1, "Process recreation dispatched a duplicate task"
-                for fault in ("after-404", "after-401", "before"):
-                    begin = len(proxy.records())
-                    proxy.arm(fault)
-                    instrument("-e", "scenario", "lose-send", "-e", "fault", fault)
-                    sends = [r for r in proxy.records()[begin:] if r["operation_id"] and r["method"] == "POST"]
-                    ids = {r["operation_id"] for r in sends}
-                    assert len(ids) == 1 and len({r["body_sha256"] for r in sends}) == 1, sends
-                    operation = ids.pop()
-                    if fault.startswith("after"):
-                        assert sum(r["response_dropped"] for r in sends) == 1
-                        accepted = receipt(operation)
-                        assert accepted and accepted["status"] == "accepted", accepted
-                        wait(lambda: task_state(accepted["task_id"]) == "running")
-                    else:
-                        assert receipt(operation) is None
-                        assert not any(r["forwarded"] for r in sends)
+                if not stream_only and os.environ.get("LEOAGENT_ANDROID_REDESIGN_ONLY") != "1":
+                    for fault in ("after-404", "after-401", "before"):
+                        begin = len(proxy.records())
+                        proxy.arm(fault)
+                        instrument("-e", "scenario", "lose-send", "-e", "fault", fault)
+                        sends = [r for r in proxy.records()[begin:] if r["operation_id"] and r["method"] == "POST"]
+                        ids = {r["operation_id"] for r in sends}
+                        assert len(ids) == 1 and len({r["body_sha256"] for r in sends}) == 1, sends
+                        operation = ids.pop()
+                        if fault.startswith("after"):
+                            assert sum(r["response_dropped"] for r in sends) == 1
+                            accepted = receipt(operation)
+                            assert accepted and accepted["status"] == "accepted", accepted
+                            wait(lambda: task_state(accepted["task_id"]) == "running")
+                        else:
+                            assert receipt(operation) is None
+                            assert not any(r["forwarded"] for r in sends)
+                        device("shell", "am", "force-stop", app)
+                        pid = subprocess.run([adb, "-s", serial, "shell", "pidof", app], capture_output=True, text=True)
+                        assert not pid.stdout.strip(), "Verification app was not stopped"
+                        # Release the real fixture while the phone process is absent.
+                        text = "slow Android fault-" + fault
+                        (gates / hashlib.sha256(text.encode()).hexdigest()).touch()
+                        if fault.startswith("after"):
+                            wait(lambda: task_state(accepted["task_id"]) == "succeeded", 10)
+                        proxy.resume()
+                        instrument("-e", "scenario", "recover-send", "-e", "fault", fault)
+                        recovered = receipt(operation)
+                        assert recovered and recovered["status"] == "accepted", recovered
+                        assert task_state(recovered["task_id"]) == "succeeded"
+                        sends = [r for r in proxy.records()[begin:] if r["operation_id"] and r["method"] == "POST"]
+                        assert {r["operation_id"] for r in sends} == {operation}
+                        assert len({r["body_sha256"] for r in sends}) == 1
+                        assert sum(r["forwarded"] for r in sends) == 1, "Recovery repeated an accepted POST"
+                        dispatched = [json.loads(line) for line in journal.read_text().splitlines()
+                                      if json.loads(line)["prompt"] == text]
+                        assert len(dispatched) == 1, "Recovery dispatched the task more than once"
+                        print(f"PASS: Android {fault}, process death, same operation/body, exactly one real ACP dispatch")
+                    other = local("pair")
+                    claimed = post("/api/v1/pairing/claim", {"code": other["code"], "device_name": "second isolated device"})
+                    assert local("pair-approve", other["id"])["ok"]
+                    phone_b = post("/api/v1/pairing/poll", {"pairing_id": claimed["pairing_id"], "poll_secret": claimed["poll_secret"]})
+                    second_log = base / "second-device.log"
+                    with second_log.open("w") as output:
+                        runner = subprocess.Popen([adb, "-s", serial, "shell", "am", "instrument", "-w",
+                            "-e", "base_url", phone_url, "-e", "scenario", "stale-approval",
+                            f"{test}/io.leoagent.app.SecurityInstrumentation"], text=True, stdout=output, stderr=subprocess.STDOUT)
+                        wait(lambda: "WAITING_SECOND_DEVICE" in second_log.read_text(), 20)
+                        with sqlite3.connect(data / "bridge.db") as c:
+                            row = c.execute("select id from interactions where state='pending' and kind='perm'").fetchone()
+                        assert row, "Android did not observe the pending approval"
+                        settled = post(f"/api/v1/interactions/{row[0]}/respond", {"option": "allow"}, phone_b["token"],
+                                       "other-device-approval", phone_b["data_epoch"])
+                        assert settled["delivery"] == "written"
+                        runner.wait(timeout=20)
+                    output = second_log.read_text()
+                    assert "PASS:" in output and "FAIL:" not in output, output
+                    print(output.strip())
+                    assert len(journal.read_text().splitlines()) == 5, "Stale approval duplicated a task"
                     device("shell", "am", "force-stop", app)
-                    pid = subprocess.run([adb, "-s", serial, "shell", "pidof", app], capture_output=True, text=True)
-                    assert not pid.stdout.strip(), "Verification app was not stopped"
-                    # Release the real fixture while the phone process is absent.
-                    text = "slow Android fault-" + fault
-                    (gates / hashlib.sha256(text.encode()).hexdigest()).touch()
-                    if fault.startswith("after"):
-                        wait(lambda: task_state(accepted["task_id"]) == "succeeded", 10)
-                    proxy.resume()
-                    instrument("-e", "scenario", "recover-send", "-e", "fault", fault)
-                    recovered = receipt(operation)
-                    assert recovered and recovered["status"] == "accepted", recovered
-                    assert task_state(recovered["task_id"]) == "succeeded"
-                    sends = [r for r in proxy.records()[begin:] if r["operation_id"] and r["method"] == "POST"]
-                    assert {r["operation_id"] for r in sends} == {operation}
-                    assert len({r["body_sha256"] for r in sends}) == 1
-                    assert sum(r["forwarded"] for r in sends) == 1, "Recovery repeated an accepted POST"
-                    dispatched = [json.loads(line) for line in journal.read_text().splitlines()
-                                  if json.loads(line)["prompt"] == text]
-                    assert len(dispatched) == 1, "Recovery dispatched the task more than once"
-                    print(f"PASS: Android {fault}, process death, same operation/body, exactly one real ACP dispatch")
-                other = local("pair")
-                claimed = post("/api/v1/pairing/claim", {"code": other["code"], "device_name": "second isolated device"})
-                assert local("pair-approve", other["id"])["ok"]
-                phone_b = post("/api/v1/pairing/poll", {"pairing_id": claimed["pairing_id"], "poll_secret": claimed["poll_secret"]})
-                second_log = base / "second-device.log"
-                with second_log.open("w") as output:
-                    runner = subprocess.Popen([adb, "-s", serial, "shell", "am", "instrument", "-w",
-                        "-e", "base_url", phone_url, "-e", "scenario", "stale-approval",
-                        f"{test}/io.leoagent.app.SecurityInstrumentation"], text=True, stdout=output, stderr=subprocess.STDOUT)
-                    wait(lambda: "WAITING_SECOND_DEVICE" in second_log.read_text(), 20)
-                    with sqlite3.connect(data / "bridge.db") as c:
-                        row = c.execute("select id from interactions where state='pending' and kind='perm'").fetchone()
-                    assert row, "Android did not observe the pending approval"
-                    settled = post(f"/api/v1/interactions/{row[0]}/respond", {"option": "allow"}, phone_b["token"],
-                                   "other-device-approval", phone_b["data_epoch"])
-                    assert settled["delivery"] == "written"
-                    runner.wait(timeout=20)
-                output = second_log.read_text()
-                assert "PASS:" in output and "FAIL:" not in output, output
-                print(output.strip())
-                assert len(journal.read_text().splitlines()) == 5, "Stale approval duplicated a task"
-                # Keep notification acceptance in the same private server/device sandbox.
-                with sqlite3.connect(data / "bridge.db") as db:
-                    import time
-                    db.executemany("insert into notes(ts,sid,kind,title,text) values(?,?,?,?,?)",
-                        [(time.time(), None, "done", f"Burst {i}", "Native history paging fixture") for i in range(120)])
-                device("shell", "am", "force-stop", app)
-                device("shell", "pm", "grant", app, "android.permission.POST_NOTIFICATIONS")
-                instrument("-e", "scenario", "notifications")
-                assert any(r.get("streamed_bytes", 0) > 0 for r in proxy.records() if "/stream?" in r["path"]), "Native conversation never received actual SSE bytes"
-                device("shell", "am", "force-stop", app)
-                device("shell", "pm", "revoke", app, "android.permission.POST_NOTIFICATIONS")
-                instrument("-e", "scenario", "notifications-denied")
+                    device("shell", "pm", "grant", app, "android.permission.POST_NOTIFICATIONS")
+                    instrument("-e", "scenario", "notifications")
+                    assert any(r.get("streamed_bytes", 0) > 0 for r in proxy.records() if "/stream?" in r["path"]), "Native conversation never received actual SSE bytes"
+                    device("shell", "am", "force-stop", app)
+                    device("shell", "pm", "revoke", app, "android.permission.POST_NOTIFICATIONS")
+                    instrument("-e", "scenario", "notifications-denied")
+                # A temporary Git worktree gives the native review page real diff evidence.
+                def git(*args):
+                    return subprocess.run(["git", "-C", str(project), *args], check=True, capture_output=True, text=True)
+                git("init", "-b", "verification")
+                review = project / "Review.kt"
+                review.write_text("fun valid(value: String) = true\n")
+                git("add", "Review.kt")
+                git("-c", "user.name=Isolated verification", "-c", "user.email=verification@example.invalid", "commit", "-m", "Fixture baseline")
+                review.write_text("fun valid(value: String) = value.isNotBlank()\n")
+                for theme in (() if stream_only else ("light", "dark")):
+                    device("shell", "am", "force-stop", app)
+                    instrument("-e", "scenario", "redesign-" + theme)
+                # Gate real ACP output so the native UI must show partial text before completion,
+                # then replay a chunk emitted while its stream is disconnected.
+                stream_reports = ROOT / "android/app/build/reports/streaming"
+                stream_reports.mkdir(parents=True, exist_ok=True)
+                for theme in ("light", "dark"):
+                    device("shell", "am", "force-stop", app)
+                    stream_log = base / f"stream-{theme}.log"
+                    with stream_log.open("w") as output:
+                        runner = subprocess.Popen([adb, "-s", serial, "shell", "am", "instrument", "-w",
+                            "-e", "base_url", phone_url, "-e", "scenario", "stream-" + theme,
+                            f"{test}/io.leoagent.app.SecurityInstrumentation"], stdout=output, stderr=subprocess.STDOUT)
+                        deadline = time.monotonic() + 90
+                        while runner.poll() is None:
+                            for line in stream_log.read_text().splitlines():
+                                if "STREAM_GATE " in line:
+                                    text, index = line.split("STREAM_GATE ", 1)[1].rsplit("|", 1)
+                                    assert text.startswith("Android stream-check ") and index in ("0", "1", "2")
+                                    (gates / (hashlib.sha256(text.encode()).hexdigest() + "." + index)).touch()
+                            if time.monotonic() > deadline:
+                                raise AssertionError("Streaming UI checks timed out: " + stream_log.read_text())
+                            time.sleep(.02)
+                        runner.wait(timeout=5)
+                    output = stream_log.read_text()
+                    print(output.strip())
+                    assert "PASS:" in output and "FAIL:" not in output, output
+                    (stream_reports / f"stream-{theme}.txt").write_text(output)
+                    for kind in ("existing", "new"):
+                        name = f"stream-{theme}-{kind}.png"
+                        (stream_reports / name).write_bytes(subprocess.check_output(
+                            [adb, "-s", serial, "exec-out", "run-as", app, "cat", "cache/" + name]))
+                assert not any(r["path"].startswith("/api/codex/notes") or "/notes/count" in r["path"] for r in proxy.records()), "Removed message center still polls history or unread counts"
+                design_reports = ROOT / "android/app/build/reports/redesign"
+                design_reports.mkdir(parents=True, exist_ok=True)
+                for theme in (() if stream_only else ("light", "dark")):
+                    for screen in ("approval", "details", "chat", "projects", "settings", "files"):
+                        name = f"redesign-{theme}-{screen}"
+                        image = subprocess.check_output([adb, "-s", serial, "exec-out", "run-as", app, "cat", f"cache/{name}.png"])
+                        (design_reports / f"{name}.png").write_bytes(image)
                 reports = ROOT / "android/app/build/reports/notifications"
                 reports.mkdir(parents=True, exist_ok=True)
-                for name in ("notifications-inbox", "notifications-denied"):
+                for name in (() if stream_only or os.environ.get("LEOAGENT_ANDROID_REDESIGN_ONLY") == "1" else ("notifications-conversation", "notifications-denied")):
                     image = subprocess.check_output([adb, "-s", serial, "exec-out", "run-as", app, "cat", f"cache/{name}.png"])
                     (reports / f"{name}.png").write_bytes(image)
 

@@ -1,0 +1,23 @@
+PASS: toolbar-touch-reproduce touchscreen first tap and keyboard behavior
+PASS: toolbar-touch touchscreen first tap and keyboard behavior
+PASS: readable Markdown tables and code in light/dark themes; rendered PNGs saved in cache
+PASS: old credential migration and legacy QR settings/save retain encrypted credentials
+PASS: legacy upgrade compatibility
+PAIRING_PENDING 280860
+PASS: real Android Keystore, encrypted credential storage, local pairing and HTTP task submission
+PASS: Android Keystore round-trip, tamper rejection and saved credentials after process recreation
+PASS: lose-send with original durable operation
+PASS: recover-send with original durable operation
+PASS: Android after-404, process death, same operation/body, exactly one real ACP dispatch
+PASS: lose-send with original durable operation
+PASS: recover-send with original durable operation
+PASS: Android after-401, process death, same operation/body, exactly one real ACP dispatch
+PASS: lose-send with original durable operation
+PASS: recover-send with original durable operation
+PASS: Android before, process death, same operation/body, exactly one real ACP dispatch
+WAITING_SECOND_DEVICE
+PASS: second device answered, Android rejected receipt clears pending operation
+PASS: notifications background service, delivery cursor, settings navigation and notification behavior
+PASS: notifications-denied background service, delivery cursor, settings navigation and notification behavior
+PASS: redesign-light real native send, allow/reject, stale approval cleanup, 320dp row, contrast and screenshots
+PASS: redesign-dark real native send, allow/reject, stale approval cleanup, 320dp row, contrast and screenshots

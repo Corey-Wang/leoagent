@@ -1,0 +1,9 @@
+三方向外观：
+  dir-1.html：浅·有色底 #E9ECF1，无衬线标题（-apple-system），正文 -apple-system
+  dir-2.html：深·近黑底 #101419，无衬线标题（-apple-system），正文 -apple-system
+  dir-3.html：浅·有色底 #E5ECFF，无衬线标题（-apple-system），正文 -apple-system
+  dir-1.html ↔ dir-2.html：色板距离 0.606，骨架相关 0.47
+  dir-1.html ↔ dir-3.html：色板距离 0.022，骨架相关 0.32 → 撞了：色板几乎相同（距离 0.022）；同一底色类＋同一标题字体（浅·有色、-apple-system）
+  dir-2.html ↔ dir-3.html：色板距离 0.631，骨架相关 0.41
+  🟡 三版落在同一个外观家族（卡片套件）——留一两版在里面没关系，三版都在就是一种气质的三个变体
+  → 撞了的那版回到方向卡重做：换骨架或换来源，不是换颜色

@@ -15,7 +15,6 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
-import com.google.android.material.bottomnavigation.BottomNavigationView
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -54,6 +53,12 @@ class ToolbarTouchChecks(private val test: Instrumentation) {
         }
         test.waitForIdleSync()
     }
+    private fun dismissOverlay(a: MainActivity) {
+        test.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        await("dialog returned window focus") { ui { a.hasWindowFocus() } }
+        // A closing system dialog can retain its touch surface through its exit animation.
+        test.uiAutomation.waitForIdle(250, 2500)
+    }
     private fun hasText(node: AccessibilityNodeInfo?, text: String): Boolean {
         if (node == null) return false
         if (node.text?.toString()?.contains(text) == true) return true
@@ -64,9 +69,9 @@ class ToolbarTouchChecks(private val test: Instrumentation) {
         val a = test.startActivitySync(Intent(c, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)) as MainActivity
         try {
-            test.runOnMainSync {
-                views(a.window.decorView).filterIsInstance<BottomNavigationView>().single().selectedItemId = R.id.n_agent
-            }
+            var back: View? = null
+            test.runOnMainSync { back = views(a.window.decorView).firstOrNull { it.isShown && it.contentDescription == "返回对话" } }
+            back?.let { tap(it) }
             test.waitForIdleSync()
             lateinit var pane: CodexPane
             lateinit var input: EditText
@@ -85,16 +90,16 @@ class ToolbarTouchChecks(private val test: Instrumentation) {
                 check(ui { more.hasFocus() }) { "Old first tap did not focus the button" }
                 tap(more)
                 await("old behavior requires second tap") { hasText(test.uiAutomation.rootInActiveWindow, "显示思考过程") }
-                test.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+                dismissOverlay(a)
                 return
             }
             await("more menu") { hasText(test.uiAutomation.rootInActiveWindow, "显示思考过程") }
-            test.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+            dismissOverlay(a)
             // Repeat after moving focus back to an editable field.
             test.runOnMainSync { input.requestFocus() }
             tap(more)
             await("more menu after returning to input") { hasText(test.uiAutomation.rootInActiveWindow, "显示思考过程") }
-            test.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+            dismissOverlay(a)
 
             lateinit var pipButton: View
             lateinit var drawerButton: View
@@ -115,7 +120,7 @@ class ToolbarTouchChecks(private val test: Instrumentation) {
             }
             tap(title)
             await("model menu") { hasText(test.uiAutomation.rootInActiveWindow, "Touch fixture model") }
-            test.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+            dismissOverlay(a)
             tap(pipButton)
             await("desktop preview opens") { ui { pip.shown } }
             tap(pipButton)
@@ -128,8 +133,8 @@ class ToolbarTouchChecks(private val test: Instrumentation) {
                 CodexPane::class.java.getDeclaredField("sid").apply { isAccessible = true }.set(pane, "touch-fixture")
             }
             tap(diffButton)
-            await("diff opens before network completes") { hasText(test.uiAutomation.rootInActiveWindow, "改动 (git diff)") }
-            test.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+            await("diff opens before network completes") { hasText(test.uiAutomation.rootInActiveWindow, "文件改动") }
+            dismissOverlay(a)
 
             // Shared controls retain keyboard support without consuming the first touch.
             var clicks = 0
@@ -151,7 +156,8 @@ class ToolbarTouchChecks(private val test: Instrumentation) {
                     check(ui { clicks == i + 1 }) { "Shared control consumed first tap: $i" }
                 }
                 test.setInTouchMode(false)
-                test.runOnMainSync { check(buttons.first().requestFocus()) }
+                await("keyboard mode propagates to dialog") { ui { !buttons.first().isInTouchMode } }
+                await("keyboard focus") { ui { buttons.first().requestFocus() } }
                 test.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER)
                 check(ui { clicks == 4 }) { "Keyboard activation no longer works" }
             } finally {

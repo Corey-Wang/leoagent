@@ -40,13 +40,30 @@ def prompt(id_, params):
             if cancelled.wait(.02):
                 reply(id_, {"stopReason": "cancelled"})
                 return
+    if gates and text.startswith("Android stream-check"):
+        for index, chunk in enumerate(("STREAM_FIRST " + "即时文字" * 300, " STREAM_SECOND", " STREAM_DONE")):
+            gate = os.path.join(gates, hashlib.sha256(text.encode()).hexdigest() + f".{index}")
+            while not os.path.exists(gate):
+                if cancelled.wait(.02):
+                    reply(id_, {"stopReason": "cancelled"})
+                    return
+            emit({"jsonrpc": "2.0", "method": "session/update", "params": {
+                "sessionId": "fixture-session", "update": {"sessionUpdate": "agent_message_chunk",
+                "content": {"type": "text", "text": chunk}}}})
+        reply(id_, {"stopReason": "end_turn"})
+        return
     if "approval" in text:
         event = threading.Event()
         answers["permission"] = event
+        tool_call = {"toolCallId": "tool1", "title": "Fixture approval"}
+        options = [{"optionId": "allow", "name": "Allow once", "kind": "allow_once"},
+                   {"optionId": "reject", "name": "Reject", "kind": "reject_once"}]
+        if "Android redesign" in text:
+            tool_call["rawInput"] = {"command": "fixture-check --isolated (no shell execution)", "cwd": "isolated test project"}
+            options += [{"optionId": "always", "name": "Allow always", "kind": "allow_always"},
+                        {"optionId": "never", "name": "Reject always", "kind": "reject_always"}]
         emit({"jsonrpc": "2.0", "id": "permission", "method": "session/request_permission", "params": {
-            "sessionId": "fixture-session", "toolCall": {"toolCallId": "tool1", "title": "Fixture approval"},
-            "options": [{"optionId": "allow", "name": "Allow once", "kind": "allow_once"},
-                        {"optionId": "reject", "name": "Reject", "kind": "reject_once"}]}})
+            "sessionId": "fixture-session", "toolCall": tool_call, "options": options}})
         while not event.wait(.02):
             if cancelled.is_set():
                 reply(id_, {"stopReason": "cancelled"})

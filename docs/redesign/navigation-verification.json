@@ -1,0 +1,65 @@
+{
+  "versionName": "0.1.6",
+  "versionCode": 7,
+  "environment": {
+    "device": "emulator-5556",
+    "dedicated_temporary_avd": true,
+    "package": "io.leoagent.app.verification",
+    "server_database_and_project": "temporary isolated fixture",
+    "real_agent_invoked": false,
+    "physical_device_installed": false,
+    "verification_package_uninstalled": true,
+    "dedicated_avd_stopped_and_removed": true
+  },
+  "checks": {
+    "bottom_navigation_removed": "PASS",
+    "message_center_removed": "PASS",
+    "legacy_message_tab_not_restored": "PASS",
+    "drawer_opens_complete_settings_with_real_touch": "PASS",
+    "return_button_preserves_session_and_unsent_text": "PASS",
+    "system_back_returns_to_conversation_and_closes_drawer": "PASS",
+    "settings_restored_after_activity_recreation": "PASS",
+    "no_message_history_or_unread_count_polling": "PASS",
+    "notification_tap_from_settings_opens_matching_session": "PASS",
+    "notification_permission_granted_and_denied": "PASS",
+    "notification_delivery_cursor_persistence_and_server_isolation": "PASS",
+    "native_send_allow_reject_stale_approval": "PASS",
+    "first_touch_keyboard_pairing_and_keystore": "PASS",
+    "process_recovery_lost_receipts_and_exactly_once_dispatch": "PASS",
+    "light_and_dark_theme_visual_review": "PASS"
+  },
+  "build": {
+    "assembleDebug": "PASS",
+    "assembleDebugAndroidTest": "PASS",
+    "lintDebug": "PASS",
+    "assembleRelease": "PASS",
+    "lintRelease": "PASS"
+  },
+  "evidence": {
+    "regression_and_notifications": "/private/tmp/leoagent-0.1.6-isolated-verification.log",
+    "navigation_final": "/private/tmp/leoagent-0.1.6-navigation-focused.log",
+    "release_build": "/private/tmp/leoagent-0.1.6-release-build.log",
+    "screenshots": "native/0.1.6/"
+  },
+  "verification_sequence": "Regression and notification scenarios passed; the initial UI test stopped on its settings-row locator. After locating the real clickable row by visible text, the final light/dark navigation run passed. No production code changed between these runs.",
+  "artifact_sha256": "47adb864b754dcaaabb373c41c5bedbc86ab6a8dd7f9553ae1dfddd93514ef93",
+  "certificate_sha256": [
+    "35b321a0f8eb9eaa4127c5d552293cce5785b55598e4261b68cf146d5379d60e"
+  ],
+  "channel_status": "published",
+  "publication": {
+    "publication_status": "published_after_explicit_user_authorization",
+    "published_at_utc": "2026-10-24T00:36:40.940854+00:00",
+    "backup_path": "$HOME/.local/share/leoagent/backups/android-0.1.5-to-0.1.6-20261024T003640867641Z",
+    "download_sha256": "47adb864b754dcaaabb373c41c5bedbc86ab6a8dd7f9553ae1dfddd93514ef93",
+    "download_bytes": 6081703,
+    "configuration_unchanged": true,
+    "same_certificate_as_current_update": true,
+    "version_api": {
+      "versionCode": 7,
+      "versionName": "0.1.6",
+      "notes": "移除底部导航栏和消息中心；设置入口移至左侧抽屉；支持返回原对话并保留未发送内容；保留任务完成、审批和提问系统通知，点击直接打开对应会话。",
+      "url": "/api/app/apk"
+    }
+  }
+}

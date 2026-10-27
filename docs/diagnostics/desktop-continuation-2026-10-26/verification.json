@@ -1,0 +1,75 @@
+{
+  "prepared_at_utc": "2026-10-26T09:22:01.091956+00:00",
+  "status": "local_fix_complete_waiting_for_deployment_authorization",
+  "candidate": {
+    "path": "$WORKSPACE/server/target/desktop-continuation-20261026/leoagent-server",
+    "platform": "Darwin",
+    "architecture": "arm64",
+    "features": [
+      "desktop-sync"
+    ],
+    "version_output": "leoagent-server 0.1.2",
+    "sha256": "ff0e697fc073451dac9bdc8fb4bae2857173ddbdd326e6b76f32f85886cf2b30",
+    "bytes": 7043552
+  },
+  "source_sha256": {
+    "server/src/desk.rs": "8a7cb4b3e4fd1fbb330534e86164dd543db2fcb92fb52f59464da9d524ca802b",
+    "server/src/orch.rs": "8f320139a8495b00deedec36bb5a1aeaeffaf5beb1b8269f3a67abde37ce8576",
+    "server/src/runtime.rs": "0ef3baedaffc8b12625f16f139261be522d2b454ae0380daa54851d7978b3eb6",
+    "tests/desktop_integration.py": "e31d74040f5421c3cbb21ad21aa8b6cb7b1aac5b177f0c44b4fdc66ca3b28e4b",
+    ".github/workflows/ci.yml": "12b18679895963b0f08bc176e8f34880be8054255b83a236078650aa185bce5a"
+  },
+  "checks": {
+    "default_unit": {
+      "result": "passed",
+      "evidence": [
+        "test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s"
+      ],
+      "log_sha256": "3f7d9703d547085c10e0e758d02622ace83d8860647cd0719fb889b936042b86"
+    },
+    "all_features_unit": {
+      "result": "passed",
+      "evidence": [
+        "test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s"
+      ],
+      "log_sha256": "6e5e5ed77f82718bb337ef1b095ba381e8c4c5fc4d576f096d7ccd360792f62e"
+    },
+    "desktop_http_ipc": {
+      "result": "passed",
+      "evidence": [
+        "PASS: desktop current-thread continuation, text/image dispatch, correlated completion/failure, deduplication, unrelated/idle/partial-patch isolation, busy refusal, approval/input replay, uncertain steering without duplicate turn, cancel, real send timeout, disconnect and restart without ACP fallback"
+      ],
+      "log_sha256": "5ab0ab64453fbcc22b5a0dd8e7562141c9939ba875001edd9c5b5be86c1da1df"
+    },
+    "acp_http_regression": {
+      "result": "passed",
+      "evidence": [
+        "PASS: real HTTP + ACP deduplication, exclusion, approval, cancel/resolve replay, crash recovery, graceful shutdown and owned child-group cleanup"
+      ],
+      "log_sha256": "1b049ca985d9617c2df604e205ef3c42b0248c0ac0e24a971b5dc8264f81e146"
+    },
+    "release_build": {
+      "result": "passed",
+      "evidence": [
+        "    Finished `release` profile [optimized] target(s) in 9.15s"
+      ],
+      "log_sha256": "0850ec2ea283a51f694a0b46b3dc684f23469fdb25343ccd8bc5d75b3974077f"
+    }
+  },
+  "production_observation": {
+    "reported_task_state": "failed",
+    "reported_task_dispatch_started": false,
+    "desktop_state_shape_checked_read_only": true,
+    "real_desktop_prompt_sent": false
+  },
+  "production_changed": false,
+  "service_restarted": false,
+  "configuration_changed": false,
+  "database_migrated": false,
+  "android_changed_for_fix": false,
+  "apk_published_for_fix": false,
+  "installed_binary_path": "$HOME/.local/bin/leoagent-server",
+  "installed_binary_sha256": "2392b1fbf09b14f6ac7155cc24308bbc39ff00924f366fcd816ae486f1026545",
+  "verification_limit": "Real HTTP and task worker with isolated desktop IPC and ACP fixtures. Read-only desktop schema check only; no real desktop Agent turn was executed.",
+  "workspace_baseline_backup": "/tmp/leoagent-desktop-task-baseline-20261026T171008"
+}

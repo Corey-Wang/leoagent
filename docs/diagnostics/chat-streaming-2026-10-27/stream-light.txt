@@ -1,0 +1,12 @@
+s_glBindAttribLocation: bind attrib 0 name position
+s_glBindAttribLocation: bind attrib 1 name color
+s_glBindAttribLocation: bind attrib 2 name localCoord
+STREAM_GATE Android stream-check light existing|0
+STREAM_FIRST_MS 118
+STREAM_GATE Android stream-check light existing|1
+STREAM_GATE Android stream-check light existing|2
+STREAM_GATE Android stream-check light new|0
+STREAM_FIRST_MS 82
+STREAM_GATE Android stream-check light new|1
+STREAM_GATE Android stream-check light new|2
+PASS: stream-light optimistic echo, stable history/viewport, full chunks, reconnect replay and terminal state

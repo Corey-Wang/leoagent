@@ -23,7 +23,7 @@ fun taskNotificationsEnabled(c: Context): Boolean {
     return manager.areNotificationsEnabled() && manager.getNotificationChannel(CH_CODEX)?.importance != NotificationManager.IMPORTANCE_NONE
 }
 
-/** Best-effort foreground polling while tasks are active; the inbox remains the durable source. */
+/** Best-effort system alerts while tasks are active; task results remain in their conversations. */
 class CodexService : Service() {
     companion object {
         fun start(c: Context) { try { c.startForegroundService(Intent(c, CodexService::class.java)) }
@@ -36,7 +36,7 @@ class CodexService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         latestStart = startId
         ensureChannels(this); ensureCodexChannel(this)
-        val n = progress("任务正在后台运行", "完成、审批或提问会提醒；消息页可补查")
+        val n = progress("任务正在后台运行", "完成、审批或提问会提醒；点击返回对话")
         if (Build.VERSION.SDK_INT >= 29) startForeground(3, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC) else startForeground(3, n)
         if (worker == null) launch(startId)
         return START_NOT_STICKY
@@ -71,7 +71,7 @@ class CodexService : Service() {
                 check(r.first == 200) { "HTTP ${r.first}" }
                 val o = JSONObject(r.second)
                 // Old computers still use since=0 as bootstrap. Recover their first page via
-                // the durable inbox instead of silently accepting a skipped first alert.
+                // the server notification history instead of silently accepting a skipped first alert.
                 if (!o.has("data_epoch") && last == 0L && o.optLong("last") > 0L) {
                     var before = o.getLong("last") + 1
                     var earliest = org.json.JSONArray()
@@ -102,7 +102,7 @@ class CodexService : Service() {
                         .setCategory(if (interaction) Notification.CATEGORY_REMINDER else Notification.CATEGORY_MESSAGE).build()
                     // A string tag avoids truncated session hashes and scopes alerts to a computer.
                     try { getSystemService(NotificationManager::class.java).notify("${SecureStore.digest(conn.base)}:$sid", 5, n) }
-                    catch (_: SecurityException) { /* permission changed during delivery; inbox keeps the message */ }
+                    catch (_: SecurityException) { /* permission changed during delivery; task remains in its conversation */ }
                 }
                 last = o.getLong("last"); store.delivered(last)
                 if (errors > 0) getSystemService(NotificationManager::class.java).notify(3, progress("后台提醒已连接", "完成、审批或提问会提醒"))

@@ -1,5 +1,0 @@
-<menu xmlns:android="http://schemas.android.com/apk/res/android">
-<item android:id="@+id/n_agent" android:title="Agent" android:icon="@drawable/nv_agent_sel"/>
-<item android:id="@+id/n_msg" android:title="消息" android:icon="@drawable/nv_bell_sel"/>
-<item android:id="@+id/n_set" android:title="设置" android:icon="@drawable/nv_set_sel"/>
-</menu>

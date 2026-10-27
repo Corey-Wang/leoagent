@@ -226,34 +226,64 @@ fn rq_of(k: &str) -> Value { if !k.is_empty() && k.chars().all(|c| c.is_ascii_di
 fn imgs_input(images: &[Value]) -> Vec<Value> { images.iter().filter(|i| truthy(i.get("data"))).map(|i| json!({"type": "image", "url": format!("data:{};base64,{}", i["mime"].as_str().unwrap_or("image/jpeg"), pystr(&i["data"]))})).collect() }
 
 // ───────── Desk (follower of a desktop-owned thread) ─────────
-struct DS { tr: Track, state: Option<Value>, rev: Value, done: HashSet<String>, perms: Vec<(String, (String, Value, Vec<Value>))>, owner: Option<Value> }
-pub struct Desk { pub sid: String, pub tid: String, d: ReentrantMutex<RefCell<DS>>, running: AtomicBool, last: Mutex<f64>, dead: AtomicBool, asks: Asks, base: (Mutex<bool>, parking_lot::Condvar) }
+struct DS { tr: Track, state: Option<Value>, synced: bool, rev: Value, done: HashSet<String>, perms: Vec<(String, (String, Value, Vec<Value>))>, owner: Option<Value> }
+
+/// Correlate completion with the submitted user message, never an idle flag or
+/// an unrelated/history turn. Snapshots can arrive before the start response.
+struct PendingTurn {
+    client_id: String,
+    turn_id: Option<String>,
+    result: Option<Result<String, String>>,
+}
+impl PendingTurn {
+    fn observe(&mut self, entry: &Value) {
+        if self.result.is_some() { return }
+        let tid = entry["turnId"].as_str().filter(|s| !s.is_empty());
+        let ours = entry["items"].as_array().into_iter().flatten().any(|it| {
+            it["type"] == "userMessage" && it["clientId"].as_str() == Some(&self.client_id)
+        });
+        if ours { self.turn_id = tid.map(str::to_string); }
+        if !ours && (tid.is_none() || tid != self.turn_id.as_deref()) { return }
+        let stop = match entry["status"].as_str() {
+            Some("completed") => "end_turn",
+            Some("interrupted") => "cancelled",
+            Some("failed") => "error",
+            _ => return,
+        };
+        self.result = Some(Ok(stop.into()));
+    }
+}
+pub struct Desk { pub sid: String, pub tid: String, d: ReentrantMutex<RefCell<DS>>, running: AtomicBool, last: Mutex<f64>, dead: AtomicBool, asks: Asks, base: (Mutex<bool>, parking_lot::Condvar), prompt: (Mutex<Option<PendingTurn>>, parking_lot::Condvar) }
 impl Desk {
     pub fn new(sid: &str, tid: &str) -> Arc<Self> {
-        let d = Arc::new(Self { sid: sid.into(), tid: tid.into(), d: ReentrantMutex::new(RefCell::new(DS { tr: Track::new(sid), state: None, rev: Value::Null, done: HashSet::new(), perms: vec![], owner: None })),
-            running: AtomicBool::new(false), last: Mutex::new(now()), dead: AtomicBool::new(false), asks: Asks::default(), base: (Mutex::new(false), parking_lot::Condvar::new()) });
+        let d = Arc::new(Self { sid: sid.into(), tid: tid.into(), d: ReentrantMutex::new(RefCell::new(DS { tr: Track::new(sid), state: None, synced: false, rev: Value::Null, done: HashSet::new(), perms: vec![], owner: None })),
+            running: AtomicBool::new(false), last: Mutex::new(now()), dead: AtomicBool::new(false), asks: Asks::default(), base: (Mutex::new(false), parking_lot::Condvar::new()), prompt: (Mutex::new(None), parking_lot::Condvar::new()) });
         ipc().subs.lock().insert(tid.into(), Arc::downgrade(&d)); ipc().follow(tid, true);
         let mut g = d.base.0.lock(); if !*g { d.base.1.wait_for(&mut g, Duration::from_secs(6)); } drop(g);
         d
     }
     pub fn has_state(&self) -> bool { self.d.lock().borrow().state.is_some() }
     fn on_lost(&self) {
-        if self.running() { bus().emit(&self.sid, "error", json!({"msg": "与桌面端的连接断开"})); self.idle("error"); }
         self.dead.store(true, Ordering::SeqCst);
+        self.fail_prompt("与桌面端的连接断开，本轮执行结果待核对");
+        if self.running() { bus().emit(&self.sid, "error", json!({"msg": "与桌面端的连接断开"})); self.idle("error"); }
     }
     fn on_change(&self, ch: Value, src: Option<Value>) {
         let g = self.d.lock();
+        if self.dead.load(Ordering::SeqCst) { return }
         { let mut s = g.borrow_mut(); s.owner = src;
             match ch["type"].as_str() {
                 Some("snapshot") => {
                     let first = s.state.is_none();
-                    s.state = Some(ch.get("conversationState").cloned().filter(|x| !x.is_null()).unwrap_or(json!({}))); s.rev = ch.get("revision").cloned().unwrap_or(Value::Null);
+                    let Some(state) = ch.get("conversationState").filter(|x| x.is_object()) else { s.synced = false; return };
+                    s.state = Some(state.clone()); s.synced = true; s.rev = ch.get("revision").cloned().unwrap_or(Value::Null);
                     if first { drop(s); self.baseline(&g); *self.base.0.lock() = true; self.base.1.notify_all(); return }
                 }
                 Some("patches") => {
-                    if s.state.is_none() || ch.get("baseRevision").cloned().unwrap_or(Value::Null) != s.rev { drop(s); ipc().follow(&self.tid, true); return }
-                    let st = s.state.as_mut().unwrap();
-                    for p in ch["patches"].as_array().into_iter().flatten() { if apply(st, p).is_none() { log("patch apply failed; resync"); } }
+                    if !s.synced || s.state.is_none() || ch.get("baseRevision").cloned().unwrap_or(Value::Null) != s.rev { s.synced = false; drop(s); ipc().follow(&self.tid, true); return }
+                    let mut next = s.state.as_ref().unwrap().clone();
+                    for p in ch["patches"].as_array().into_iter().flatten() { if apply(&mut next, p).is_none() { s.synced = false; drop(s); log("patch apply failed; resync"); ipc().follow(&self.tid, true); return } }
+                    s.state = Some(next);
                     s.rev = ch.get("revision").cloned().unwrap_or(Value::Null);
                 }
                 _ => {}
@@ -291,6 +321,13 @@ impl Desk {
             }
         }
         self.requests(g);
+        if g.borrow().synced {
+            let mut pending = self.prompt.0.lock();
+            if let Some(p) = pending.as_mut() {
+                for (_, e) in Self::ents(&g.borrow()) { p.observe(&e); }
+                if p.result.is_some() { self.prompt.1.notify_all(); }
+            }
+        }
     }
     fn requests(&self, g: &RefCell<DS>) {
         let reqs: Vec<Value> = g.borrow().state.as_ref().and_then(|s| s["requests"].as_array().cloned()).unwrap_or_default();
@@ -316,8 +353,59 @@ impl Desk {
         drop(s); if idle_now { self.idle("end_turn") }
     }
     fn idle(&self, stop: &str) {
+        // The durable worker owns the terminal event and notification for its
+        // turn. A historic completion/temporary idle must not finish it early.
+        if self.prompt.0.lock().is_some() { return }
         if !self.running.swap(false, Ordering::SeqCst) { return }
         bus().flush(Some(&self.sid)); bus().emit(&self.sid, "turn", json!({"state": "idle", "stopReason": stop})); crate::done_note(&self.sid, stop);
+    }
+    fn fail_prompt(&self, message: &str) {
+        let mut pending = self.prompt.0.lock();
+        if let Some(p) = pending.as_mut() {
+            if p.result.is_none() { p.result = Some(Err(message.into())); }
+            self.prompt.1.notify_all();
+        }
+    }
+    fn durable_prompt(&self, blocks: &[Value]) -> Result<String, (bool, String)> {
+        let cm = uuid::Uuid::new_v4().simple().to_string();
+        {
+            let g = self.d.lock();
+            let mut state = g.borrow_mut();
+            let status = state.state.as_ref().and_then(|s| s.pointer("/threadRuntimeStatus/type")).and_then(Value::as_str);
+            if !self.alive() || !state.synced || !matches!(status, Some("idle") | Some("active")) {
+                return Err((false, "桌面会话尚未连接或同步完成，未发送本轮消息；请重新打开原会话后重试".into()));
+            }
+            if Self::active(&state) || Self::ents(&state).iter().any(|(_, e)| e["status"] == "inProgress") {
+                return Err((false, "桌面会话仍在执行上一轮，未发送本轮消息；请等待完成后再发送".into()));
+            }
+            let mut pending = self.prompt.0.lock();
+            if pending.is_some() { return Err((false, "桌面会话已有待核对的发送，未重复发送".into())); }
+            *pending = Some(PendingTurn { client_id: cm.clone(), turn_id: None, result: None });
+            state.tr.sent.insert(cm.clone());
+            self.running.store(true, Ordering::SeqCst);
+        }
+        let input: Vec<Value> = blocks.iter().filter_map(|b| match b["type"].as_str() {
+            Some("text") => Some(json!({"type":"text", "text":b["text"], "text_elements":[]})),
+            Some("image") => Some(json!({"type":"image", "url":format!("data:{};base64,{}", b["mimeType"].as_str().unwrap_or("image/jpeg"), pystr(&b["data"]))})),
+            _ => None,
+        }).collect();
+        let cfg = crate::sess_row(&self.sid).unwrap_or(Value::Null);
+        let mut req = json!({"threadId":self.tid, "input":input, "clientUserMessageId":cm});
+        for k in ["model", "effort"] { if truthy(cfg.get(k)) { req[k] = cfg[k].clone(); } }
+        let r = ipc().request("thread-follower-start-turn", json!({"conversationId":self.tid, "turnStart":{"request":req, "context":{"clientUserMessageId":cm}}}), None, 60);
+        // A missing/failed response cannot prove the desktop did not execute.
+        // Preserve any already-observed terminal fact, otherwise retain unknown.
+        if r["resultType"] != "success" {
+            self.fail_prompt(&format!("桌面端未确认发送，本轮执行结果待核对：{}", pystr(r.get("error").unwrap_or(&Value::Null))));
+        }
+        let end = std::time::Instant::now() + Duration::from_secs(6 * 3600);
+        let mut pending = self.prompt.0.lock();
+        while pending.as_ref().is_some_and(|p| p.result.is_none()) {
+            if self.prompt.1.wait_until(&mut pending, end).timed_out() { break }
+        }
+        pending.take().and_then(|p| p.result)
+            .unwrap_or_else(|| Err("等待桌面本轮结束超时，执行结果待核对".into()))
+            .map_err(|e| (true, e))
     }
     pub fn start(&self, text: &str, images: &[Value], cfg: &Value) -> Result<Value, String> {
         let cm = uuid::Uuid::new_v4().simple().to_string(); self.d.lock().borrow_mut().tr.sent.insert(cm.clone());
@@ -334,7 +422,8 @@ impl AgentLike for Desk {
     fn sid(&self) -> &str { &self.sid }
     fn alive(&self) -> bool { !self.dead.load(Ordering::SeqCst) && ipc().connected() }
     fn running(&self) -> bool { self.running.load(Ordering::SeqCst) }
-    fn set_running(&self, v: bool) { self.running.store(v, Ordering::SeqCst) }
+    fn set_running(&self, v: bool) { self.running.store(v || (!self.dead.load(Ordering::SeqCst) && Self::active(&self.d.lock().borrow())), Ordering::SeqCst) }
+    fn prompt(&self, blocks: &[Value]) -> Result<String, (bool, String)> { self.durable_prompt(blocks) }
     fn backend(&self) -> &'static str { "desktop" }
     fn last(&self) -> f64 { *self.last.lock() }
     fn touch(&self) { *self.last.lock() = now() }
@@ -342,11 +431,17 @@ impl AgentLike for Desk {
     fn asks(&self) -> &Asks { &self.asks }
     fn is_desk(&self) -> bool { true }
     fn answer_perm(&self, rid: &str, option: Option<String>) -> bool {
-        let v = { let g = self.d.lock(); let mut s = g.borrow_mut(); let Some(i) = s.perms.iter().position(|x| x.0 == rid) else { return false }; s.perms.remove(i).1 };
-        let (k, r, decs) = v; let m = pystr(r.get("method").unwrap_or(&Value::Null));
+        // Keep an uncertain request known, so the next snapshot cannot recreate
+        // it under a new approval ID and bypass the durable unknown receipt.
+        let v = self.d.lock().borrow().perms.iter().find(|x| x.0 == rid).map(|x| x.1.clone());
+        let Some((k, r, decs)) = v else { return false };
+        let m = pystr(r.get("method").unwrap_or(&Value::Null));
         let dec = dec_of(&decs, option.as_deref());
         let meth = if m.contains("commandExecution") { Some("thread-follower-command-approval-decision") } else if m.contains("fileChange") { Some("thread-follower-file-approval-decision") } else { None };
-        if let Some(meth) = meth { ipc().request(meth, json!({"conversationId": self.tid, "requestId": rq_of(&k), "decision": dec}), None, 15); }
+        let Some(meth) = meth else { return false };
+        let reply = ipc().request(meth, json!({"conversationId": self.tid, "requestId": rq_of(&k), "decision": dec}), None, 15);
+        if reply["resultType"] != "success" { log("approval delivery unknown"); return false }
+        self.d.lock().borrow_mut().perms.retain(|x| x.0 != rid);
         bus().emit(&self.sid, "perm_done", json!({"rid": rid, "option": option, "name": dec_name(&dec)})); true
     }
     fn send_answer(&self, ctx: &Value, spec: &Value, answers: &Value, _text: &str, skip: bool) -> Result<(), String> {
@@ -360,9 +455,10 @@ impl AgentLike for Desk {
                 let rm = json!({"text": t, "prompt": t, "images": [], "attachments": [], "context": {"cwd": cwd, "workspaceRoots": [cwd], "turnTrigger": "composer", "commentAttachments": [], "attachments": []}});
                 let r = ipc().request("thread-follower-steer-turn", json!({"conversationId": self.tid, "input": inp, "clientUserMessageId": cm, "restoreMessage": rm, "attachments": [], "serviceTier": null}), Some(1), 30);
                 if r["resultType"] == "success" { return Ok(()) }
-                log(&format!("steer failed {}", r["error"]));
+                return Err(format!("桌面端补充信息结果未知，未另建任务重发：{}", r["error"]));
             }
-            self.start(&t, &[], &json!({}))?; bus().emit(&self.sid, "turn", json!({"state": "running"})); return Ok(())
+            crate::queue_prompt(&self.sid, t, spec["rid"].as_str())?;
+            return Ok(())
         }
         let r = &ctx["req"]; let m = pystr(r.get("method").unwrap_or(&Value::Null)); let rq = rq_of(&pystr(&ctx["rq"]));
         let (resp, meth) = if m.contains("requestUserInput") {
@@ -388,6 +484,9 @@ impl AgentLike for Desk {
     fn cancel(&self) { self.cancel_perms(); ipc().request("thread-follower-interrupt-turn", json!({"conversationId": self.tid, "mode": "user-stop"}), None, 15); }
     fn kill(&self) {
         self.dead.store(true, Ordering::SeqCst);
+        // Drain an in-flight snapshot before releasing an unknown task's claim.
+        let _g = self.d.lock();
+        self.fail_prompt("桌面会话连接已停止，本轮执行结果待核对");
         { let mut s = ipc().subs.lock(); if s.get(&self.tid).map(|w| w.as_ptr() == self as *const _).unwrap_or(false) { s.remove(&self.tid); } }
         ipc().follow(&self.tid, false);
     }

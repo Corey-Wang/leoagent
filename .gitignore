@@ -52,4 +52,10 @@ shots*/
 *.png
 !docs/img/*.png
 !docs/icon.png
+!docs/redesign/design-demos/*.png
+!docs/redesign/native/*.png
+!docs/redesign-v2/design-demos/*.png
+!docs/redesign-v2/native/*.png
+!docs/redesign-v2/native/320dp/*.png
+!docs/redesign-v2/release/*.png
 !android/app/src/main/res/**/*.png

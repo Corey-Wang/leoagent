@@ -1,0 +1,17 @@
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): false
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+Signer #1 certificate DN: CN=LeoAgent personal, O=Corey
+Signer #1 certificate SHA-256 digest: 35b321a0f8eb9eaa4127c5d552293cce5785b55598e4261b68cf146d5379d60e
+Signer #1 certificate SHA-1 digest: f87544017bf4a7b5e742d5f6ee0ace093ce05411
+Signer #1 certificate MD5 digest: 833e4799019b76fe9f7d788c89123562
+Signer #1 key algorithm: RSA
+Signer #1 key size (bits): 4096
+Signer #1 public key SHA-256 digest: 8ad4848f07c74f14540db805329cbe19b80ef2effd5b1105f18bb16b43669c2e
+Signer #1 public key SHA-1 digest: ca6d16ff0d3b080ef32f5b87381f514b378fadd5
+Signer #1 public key MD5 digest: 51ee2417afd7ca83fd7f46550c726049

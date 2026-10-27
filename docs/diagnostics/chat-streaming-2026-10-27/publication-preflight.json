@@ -1,0 +1,24 @@
+{
+  "authorization": "用户原话：发布",
+  "checked_at_utc": "2026-10-27T00:49:40.399805+00:00",
+  "candidate_sha256": "335d2a917e85e175f15438a4f2117f17537fba8bb1acc3e9900914f0e540c187",
+  "candidate_certificate_sha256": "35b321a0f8eb9eaa4127c5d552293cce5785b55598e4261b68cf146d5379d60e",
+  "prior_version": {
+    "versionCode": 8,
+    "versionName": "0.1.7",
+    "notes": "A 静默协作改版：两行输入、固定审批与拒绝确认、项目抽屉、按文件查看项目改动；保留浅深色、语音、图片、画中画、任务恢复与系统通知。",
+    "url": "/api/app/apk"
+  },
+  "prior_apk_sha256": "f32cfec8c5f7dad883d12ed4c77e149992f869a0a00e9fe20ccaf494e7b531af",
+  "backup_path": "$HOME/.local/share/leoagent/backups/android-0.1.7-to-0.1.8-20261027T004940389464Z",
+  "backup_verified": true,
+  "configuration_path": "$HOME/.config/leoagent/config.toml",
+  "configuration_sha256": "72ea1f2ed26ac58d5130aa925e2fe33bf34f5d3432e951bbddcc4ab115f8555a",
+  "data_path": "$HOME/.local/share/leoagent",
+  "health_identity": {
+    "server_id": "eae48401-7d8d-4c3b-ac0a-231641386263",
+    "data_epoch": "a37c1ec0-8ca4-4cf5-baf8-5c0e3f756f97",
+    "server_generation": "9e4d5f40-739c-40b3-930e-f579bb6bb5a9"
+  },
+  "published": false
+}

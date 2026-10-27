@@ -1,0 +1,130 @@
+{
+  "direction": "A 清晰工作台",
+  "device": "emulator-5554",
+  "package": "io.leoagent.app.verification",
+  "isolation": "temporary server, database, project and deterministic ACP fixture; no real agent",
+  "reports": {
+    "full": {
+      "exit_code": 0,
+      "checks": [
+        "PASS: toolbar-touch-reproduce touchscreen first tap and keyboard behavior",
+        "PASS: toolbar-touch touchscreen first tap and keyboard behavior",
+        "PASS: readable Markdown tables and code in light/dark themes; rendered PNGs saved in cache",
+        "PASS: old credential migration and legacy QR settings/save retain encrypted credentials",
+        "PASS: legacy upgrade compatibility",
+        "PASS: real Android Keystore, encrypted credential storage, local pairing and HTTP task submission",
+        "PASS: Android Keystore round-trip, tamper rejection and saved credentials after process recreation",
+        "PASS: lose-send with original durable operation",
+        "PASS: recover-send with original durable operation",
+        "PASS: Android after-404, process death, same operation/body, exactly one real ACP dispatch",
+        "PASS: lose-send with original durable operation",
+        "PASS: recover-send with original durable operation",
+        "PASS: Android after-401, process death, same operation/body, exactly one real ACP dispatch",
+        "PASS: lose-send with original durable operation",
+        "PASS: recover-send with original durable operation",
+        "PASS: Android before, process death, same operation/body, exactly one real ACP dispatch",
+        "PASS: second device answered, Android rejected receipt clears pending operation",
+        "PASS: notifications native inbox, background service, delivery/read cursors and notification behavior",
+        "PASS: notifications-denied native inbox, background service, delivery/read cursors and notification behavior",
+        "PASS: redesign-light real native send, allow/reject, stale approval cleanup, 320dp row, contrast and screenshots",
+        "PASS: redesign-dark real native send, allow/reject, stale approval cleanup, 320dp row, contrast and screenshots"
+      ],
+      "failure_markers": false
+    },
+    "focused_after_session_fallback": {
+      "exit_code": 0,
+      "checks": [
+        "PASS: toolbar-touch-reproduce touchscreen first tap and keyboard behavior",
+        "PASS: toolbar-touch touchscreen first tap and keyboard behavior",
+        "PASS: readable Markdown tables and code in light/dark themes; rendered PNGs saved in cache",
+        "PASS: old credential migration and legacy QR settings/save retain encrypted credentials",
+        "PASS: legacy upgrade compatibility",
+        "PASS: real Android Keystore, encrypted credential storage, local pairing and HTTP task submission",
+        "PASS: Android Keystore round-trip, tamper rejection and saved credentials after process recreation",
+        "PASS: redesign-light real native send, allow/reject, stale approval cleanup, 320dp row, contrast and screenshots",
+        "PASS: redesign-dark real native send, allow/reject, stale approval cleanup, 320dp row, contrast and screenshots"
+      ],
+      "failure_markers": false
+    }
+  },
+  "screenshots": [
+    {
+      "file": "native/redesign-dark-approval.png",
+      "sha256": "401ea0b3afb75a5ed5fe42796263eeff69b18feca2580ed6494afee010340e7c"
+    },
+    {
+      "file": "native/redesign-dark-chat.png",
+      "sha256": "6bca1b0ae93f0cb7887587a0b486735d0d7880a37112df4a66a27d84fd156012"
+    },
+    {
+      "file": "native/redesign-dark-details.png",
+      "sha256": "e363af649a3c8697ca134e5bc5901ac1c60c849d881d184221c6943a811d4655"
+    },
+    {
+      "file": "native/redesign-dark-inbox.png",
+      "sha256": "96888539fd6b7cae7b41c339b1b465966ddfdfe96f7a96e74d219a32d2010815"
+    },
+    {
+      "file": "native/redesign-dark-projects.png",
+      "sha256": "883a2efd930b84861211183e4b131c575e192969e14f79954aabcad5406e469f"
+    },
+    {
+      "file": "native/redesign-dark-settings.png",
+      "sha256": "4e7bf752c61740dfe221e4fa983efdb2f7ffda8fdd7cb3865c1e333621ef66b7"
+    },
+    {
+      "file": "native/redesign-light-approval.png",
+      "sha256": "16bc7220b636108e466938be1504ec3d06e806534377273458c54a0d14229231"
+    },
+    {
+      "file": "native/redesign-light-chat.png",
+      "sha256": "69395cfe93e5d206a7bf7cb7135df800700fd0982bfa10e5591d4a07d5093f49"
+    },
+    {
+      "file": "native/redesign-light-details.png",
+      "sha256": "0ba5a4132bab9201a8fc601d89efe241aa422240514a13f72f0916ab7e1e9aa6"
+    },
+    {
+      "file": "native/redesign-light-inbox.png",
+      "sha256": "a5ed883d016e2c055817cd42e91913a670f66e929cccc60a945a72cc1319fc3a"
+    },
+    {
+      "file": "native/redesign-light-projects.png",
+      "sha256": "c82fa0991db698ef575707afa352d4eaf700ce5e4f41e297df3c5c8dc537048b"
+    },
+    {
+      "file": "native/redesign-light-settings.png",
+      "sha256": "823fb78fb6d3a40daa0d580cd1e81f79aa458f65ac4c1a81a37acd4a6fa4fa65"
+    }
+  ],
+  "limits": [
+    "320dp check measures a shared native row; emulator screenshots use its existing display size",
+    "Physical microphone, real agent accounts and desktop capture were not exercised",
+    "No production deployment or physical-device installation"
+  ],
+  "artifacts": [
+    {
+      "path": "android/app/build/outputs/apk/debug/leoagent-redesign-A-debug.apk",
+      "application_id": "io.leoagent.app",
+      "sha256": "a611c4c227d0871ec1df41b407378a9249febaec1050caa34e7fd4aa43609972",
+      "bytes": 7381159,
+      "signature_verified": true
+    },
+    {
+      "path": "android/app/build/outputs/apk/verification/app-verification.apk",
+      "application_id": "io.leoagent.app.verification",
+      "sha256": "a6be7f71e27a105cd092dbfc12a46091f5340181ecfd941a08c5364c248bfbf9",
+      "bytes": 7890930,
+      "signature_verified": true
+    }
+  ],
+  "verification_packages_removed": true,
+  "reviewed_screenshots": [
+    "light/dark approval",
+    "light full request",
+    "light chat",
+    "light/dark project sessions",
+    "light/dark settings",
+    "light inbox"
+  ]
+}

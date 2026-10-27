@@ -1,0 +1,165 @@
+{
+  "prepared_at": "2026-10-27T08:04:49.190367+08:00",
+  "status": "deployed_and_real_validation_passed",
+  "upload": "20261027-075542-manual.zip",
+  "app_version": "0.1.7(8)",
+  "production_failures": [
+    {
+      "id": "3be9918c-8e92-4543-988f-fe6a72f0c1b6",
+      "sid": "63aed81a6046406e",
+      "created": "2026-10-26T22:18:45.866206+08:00",
+      "updated": "2026-10-26T22:19:46.682096+08:00",
+      "state": "failed",
+      "dispatch_started": 0,
+      "reason": "initialize",
+      "elapsed_seconds": 60.816
+    },
+    {
+      "id": "0e157690-11b2-444d-b2b9-8631c8be2084",
+      "sid": "63aed81a6046406e",
+      "created": "2026-10-26T22:20:12.773180+08:00",
+      "updated": "2026-10-26T22:21:13.592759+08:00",
+      "state": "failed",
+      "dispatch_started": 0,
+      "reason": "initialize",
+      "elapsed_seconds": 60.82
+    }
+  ],
+  "candidate": {
+    "path": "$WORKSPACE/server/target/initialize-20261027/leoagent-server",
+    "sha256": "e1ecc615a35c79c040717d3d3fc5082e985ac9f97db4c724f1d8ce226f0e321b",
+    "version": "leoagent-server 0.1.2",
+    "features": [
+      "desktop-sync"
+    ]
+  },
+  "installed_sha256": "ff0e697fc073451dac9bdc8fb4bae2857173ddbdd326e6b76f32f85886cf2b30",
+  "source_sha256": {
+    "server/src/runtime.rs": "2560651b06abeca02b51da47c0e3fb2405d2b4aaf7221a0e8e8b52b76824c0ac",
+    "server/src/orch.rs": "e8a0cea536aec01f93d7fbe99c0d4993c859b473dd2dd91cc7eecca65215ca18",
+    "tests/initialize_integration.py": "6a3078c345317af83b0f549d2a36ccf3c418eeb2d993e45b5f7952a4e56897dc",
+    "tests/fixtures/initialize_agent.py": "c92150b1d3b02d6f49e4a116488866cc92dcf3554c36bbd35a00ac20142d2deb",
+    ".github/workflows/ci.yml": "5de8f15e07074772566bacd4332f2deebfbf33339c19686f0e7d882cac3f2410"
+  },
+  "production_changed": true,
+  "service_restarted": true,
+  "real_agent_prompt_sent": true,
+  "real_adapter_initialization_seconds": 0.438,
+  "installed_binary_isolated_launchd_import_seconds": 1.146,
+  "isolated_launchd_evidence_dir": "$TMPDIR/leoagent-launchd-init-20261027-rnwsa8xc",
+  "workspace_baseline_dir": "$TMPDIR/leoagent-initialize-baseline-20261027-_w04tzzk",
+  "root_cause_status": "intermittent initialize timeout not reproduced; macOS code requirement mismatch is a clue, not proven causation",
+  "verified_at": "2026-10-27T08:09:23.030962+08:00",
+  "checks": {
+    "six_initialization_faults": {
+      "result": "passed",
+      "log": "initialize_http.log",
+      "sha256": "3cf8854591567a6d32571997de95f60834c3ba17428aae86619facd7fb7320b6",
+      "evidence": [
+        "PASS: new_error, 1 initialization(s), 0 prompt(s), 2.96s",
+        "PASS: remote_error, 1 initialization(s), 0 prompt(s), 3.42s",
+        "PASS: cancel, 1 initialization(s), 0 prompt(s), 60.54s",
+        "PASS: recover, 2 initialization(s), 1 prompt(s), 60.58s",
+        "PASS: new_timeout, 1 initialization(s), 0 prompt(s), 62.50s",
+        "PASS: permanent, 2 initialization(s), 0 prompt(s), 121.08s"
+      ]
+    },
+    "final_recovery_cancel_and_remote_error": {
+      "result": "passed",
+      "log": "final_initialize_targeted.log",
+      "sha256": "ee9df95a95277babb44a6c70ff501aef3cf195d7d55a07b1d7d2f040a6b4e5bd",
+      "evidence": [
+        "PASS: remote_error, 1 initialization(s), 0 prompt(s), 1.05s",
+        "PASS: cancel, 1 initialization(s), 0 prompt(s), 60.57s",
+        "PASS: recover, 2 initialization(s), 1 prompt(s), 60.59s"
+      ]
+    },
+    "final_acp_regression": {
+      "result": "passed",
+      "log": "final_acp_regression.log",
+      "sha256": "1b049ca985d9617c2df604e205ef3c42b0248c0ac0e24a971b5dc8264f81e146",
+      "evidence": [
+        "PASS: real HTTP + ACP deduplication, exclusion, approval, cancel/resolve replay, crash recovery, graceful shutdown and owned child-group cleanup"
+      ]
+    },
+    "desktop_regression": {
+      "result": "passed",
+      "log": "desktop_regression.log",
+      "sha256": "5ab0ab64453fbcc22b5a0dd8e7562141c9939ba875001edd9c5b5be86c1da1df",
+      "evidence": [
+        "PASS: desktop current-thread continuation, text/image dispatch, correlated completion/failure, deduplication, unrelated/idle/partial-patch isolation, busy refusal, approval/input replay, uncertain steering without duplicate turn, cancel, real send timeout, disconnect and restart without ACP fallback"
+      ]
+    },
+    "final_unit_all_features": {
+      "result": "passed",
+      "log": "final_unit_all_features.log",
+      "sha256": "b5f59784722770b5213e5096fdfe7620af8a127e17522fe677d2b774c9b221ec",
+      "evidence": [
+        "    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.29s",
+        "test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s"
+      ]
+    },
+    "final_unit_default": {
+      "result": "passed",
+      "log": "final_unit_default.log",
+      "sha256": "654b3130ccb60aa57ef6d14b309d6d775092d5a786cd37e53a19103ccef88473",
+      "evidence": [
+        "    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.86s",
+        "test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s"
+      ]
+    },
+    "final_release_build": {
+      "result": "passed",
+      "log": "final_release_build.log",
+      "sha256": "002952c543f42711710d894023e67e944815e8c9f55a5d2c63f90e87d881e4e3",
+      "evidence": [
+        "    Finished `release` profile [optimized] target(s) in 7.32s"
+      ]
+    }
+  },
+  "real_adapter_candidate_check": {
+    "elapsed_seconds": 1.084,
+    "evidence_dir": "$TMPDIR/leoagent-final-init-only-20261027-fgh1_eiq",
+    "real_model_prompt_sent": false
+  },
+  "verification_limit": "One authorized read-only real prompt returned OK through phone HTTPS submission, persisted task/events, public SSE and snapshot. No physical phone UI inspection; underlying intermittent initialization hang not proven eliminated. Existing cancel-timeout unknown state is unchanged.",
+  "installed_binary_unchanged": false,
+  "production_health_after": {
+    "ok": true,
+    "api_version": 1,
+    "server_id": "eae48401-7d8d-4c3b-ac0a-231641386263",
+    "data_epoch": "a37c1ec0-8ca4-4cf5-baf8-5c0e3f756f97",
+    "server_generation": "9e4d5f40-739c-40b3-930e-f579bb6bb5a9",
+    "features": {
+      "durable_tasks": true,
+      "idempotent_prompts": true,
+      "snapshots": true,
+      "device_pairing": true
+    },
+    "agents": 1,
+    "running": 0,
+    "backend": "desktop",
+    "desktop": true,
+    "version": "0.1.2",
+    "pref": "auto"
+  },
+  "production_service_generation_unchanged": false,
+  "pre_deployment_observation": {
+    "production_changed": false,
+    "service_restarted": false,
+    "real_agent_prompt_sent": false,
+    "installed_binary_unchanged": true,
+    "production_health_after": {
+      "ok": true,
+      "server_generation": "27a4b749-2069-4b1e-861b-b44452c2b4cf",
+      "running": 0,
+      "agents": 0,
+      "backend": "desktop",
+      "version": "0.1.2"
+    },
+    "production_service_generation_unchanged": true
+  },
+  "deployment_record": "deployment.json",
+  "real_validation_record": "real_validation.json",
+  "deployed_candidate_sha256": "e1ecc615a35c79c040717d3d3fc5082e985ac9f97db4c724f1d8ce226f0e321b"
+}

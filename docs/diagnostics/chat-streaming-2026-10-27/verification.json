@@ -1,0 +1,66 @@
+{
+  "date": "2026-10-27T00:47:54.269095+00:00",
+  "published": false,
+  "finalSourceStreamingChecksPassed": true,
+  "firstChunkMs": [
+    118,
+    82,
+    92,
+    97
+  ],
+  "firstChunkCharacters": 1213,
+  "matrix": [
+    "light-existing",
+    "light-new",
+    "dark-existing",
+    "dark-new"
+  ],
+  "checks": [
+    "optimistic echo retained",
+    "history view identity retained",
+    "task status in scroll content",
+    "viewport top and height stable",
+    "first chunk before task completion",
+    "reconnect replays offline chunk without rebuild",
+    "no duplicate messages",
+    "final text synchronizes before terminal task state"
+  ],
+  "initialPassingChecks": [
+    "PASS: toolbar-touch-reproduce touchscreen first tap and keyboard behavior",
+    "PASS: toolbar-touch touchscreen first tap and keyboard behavior",
+    "PASS: readable Markdown tables and code in light/dark themes; rendered PNGs saved in cache",
+    "PASS: old credential migration and legacy QR settings/save retain encrypted credentials",
+    "PASS: legacy upgrade compatibility",
+    "PASS: real Android Keystore, encrypted credential storage, local pairing and HTTP task submission",
+    "PASS: Android Keystore round-trip, tamper rejection and saved credentials after process recreation",
+    "PASS: lose-send with original durable operation",
+    "PASS: recover-send with original durable operation",
+    "PASS: Android after-404, process death, same operation/body, exactly one real ACP dispatch",
+    "PASS: lose-send with original durable operation",
+    "PASS: recover-send with original durable operation",
+    "PASS: Android after-401, process death, same operation/body, exactly one real ACP dispatch",
+    "PASS: lose-send with original durable operation",
+    "PASS: recover-send with original durable operation",
+    "PASS: Android before, process death, same operation/body, exactly one real ACP dispatch",
+    "PASS: second device answered, Android rejected receipt clears pending operation",
+    "PASS: notifications background service, delivery cursor, settings navigation and notification behavior",
+    "PASS: notifications-denied background service, delivery cursor, settings navigation and notification behavior",
+    "PASS: redesign-light real native send, allow/reject, stale approval cleanup, 320dp row, contrast and screenshots",
+    "PASS: redesign-dark real native send, allow/reject, stale approval cleanup, 320dp row, contrast and screenshots"
+  ],
+  "initialFailure": "Final text rendering could lag task succeeded by a frame; fixed and final-source streaming checks passed.",
+  "releaseBuild": "assembleRelease and lintRelease passed",
+  "apkSha256": "335d2a917e85e175f15438a4f2117f17537fba8bb1acc3e9900914f0e540c187",
+  "physicalPhoneModified": false,
+  "productionServiceModified": false,
+  "modelOrEffortChanged": false,
+  "realModelTestDispatched": false,
+  "emulator": "emulator-5566",
+  "avd": "leoagent-chat-20261027",
+  "cleanup": "Verification APKs uninstalled, adb reverse removed, dedicated emulator stopped and dedicated AVD deleted.",
+  "channelUnchanged": {
+    "versionName": "0.1.7",
+    "versionCode": 8,
+    "sha256": "f32cfec8c5f7dad883d12ed4c77e149992f869a0a00e9fe20ccaf494e7b531af"
+  }
+}

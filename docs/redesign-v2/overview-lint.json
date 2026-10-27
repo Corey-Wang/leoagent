@@ -1,0 +1,11 @@
+[
+  {
+    "path": "$WORKSPACE/docs/redesign-v2/design-demos/index.html",
+    "red": [],
+    "yellow": [
+      "标题字体是 -apple-system（UI 小字体当 display）"
+    ],
+    "families": [],
+    "look": "浅·中性白底 #F6F7F9，无衬线标题（-apple-system），正文 -apple-system"
+  }
+]

@@ -1,0 +1,20 @@
+{
+  "verified_at": "2026-10-27T08:15:07.903464+08:00",
+  "task_id": "1164242b-f7f0-46dc-abe4-1292c9449b3c",
+  "session_id": "0484d482d4ce414b",
+  "state": "succeeded",
+  "dispatch_started": true,
+  "task_seconds": 8.016,
+  "observed_seconds": 10.695,
+  "reply": "OK",
+  "public_sse_reply": "OK",
+  "public_sse_http_status": 200,
+  "public_snapshot_http_status": 200,
+  "public_snapshot_task_state": "succeeded",
+  "prompt_submission_count": 1,
+  "task_count": 1,
+  "user_event_count": 1,
+  "tool_event_count": 0,
+  "project_files": [],
+  "physical_phone_ui_checked": false
+}

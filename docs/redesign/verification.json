@@ -1,0 +1,83 @@
+{
+  "scope": "Offline HTML direction prototypes only; Android product not changed",
+  "directions": [
+    {
+      "direction": "A",
+      "apps": 4,
+      "javascript_errors": [],
+      "external_requests": [],
+      "checks": [
+        "initial approval visible",
+        "48px actions",
+        "expand evidence",
+        "Agent selection",
+        "independent phone states",
+        "safe sample send",
+        "approval and rejection",
+        "message filters and unread badges",
+        "unknown result guidance",
+        "notification switch",
+        "credential dialog and no save",
+        "pairing example",
+        "session search",
+        "390px and 320px layout"
+      ]
+    },
+    {
+      "direction": "B",
+      "apps": 4,
+      "javascript_errors": [],
+      "external_requests": [],
+      "checks": [
+        "initial approval visible",
+        "48px actions",
+        "expand evidence",
+        "Agent selection",
+        "independent phone states",
+        "safe sample send",
+        "approval and rejection",
+        "message filters and unread badges",
+        "unknown result guidance",
+        "notification switch",
+        "credential dialog and no save",
+        "pairing example",
+        "session search",
+        "390px and 320px layout"
+      ]
+    },
+    {
+      "direction": "C",
+      "apps": 4,
+      "javascript_errors": [],
+      "external_requests": [],
+      "checks": [
+        "initial approval visible",
+        "48px actions",
+        "expand evidence",
+        "Agent selection",
+        "independent phone states",
+        "safe sample send",
+        "approval and rejection",
+        "message filters and unread badges",
+        "unknown result guidance",
+        "notification switch",
+        "credential dialog and no save",
+        "pairing example",
+        "session search",
+        "390px and 320px layout"
+      ]
+    }
+  ],
+  "design_lint": {
+    "red_issues_by_direction": {
+      "A": 0,
+      "B": 0,
+      "C": 0
+    },
+    "reviewed_advisories": [
+      "Monospace retained for actual commands, paths and numeric file changes, not decorative labels.",
+      "A/B use the existing native system font intentionally; C uses Chinese serif headings.",
+      "Comparison tool flags similar light palettes in A/C and repeated phone frames. C was reworked into a project masthead and two-column reading layout; no claim that automated comparison passed."
+    ]
+  }
+}

@@ -1,0 +1,134 @@
+PASS: toolbar-touch-reproduce touchscreen first tap and keyboard behavior
+PASS: toolbar-touch touchscreen first tap and keyboard behavior
+PASS: readable Markdown tables and code in light/dark themes; rendered PNGs saved in cache
+PASS: old credential migration and legacy QR settings/save retain encrypted credentials
+PASS: legacy upgrade compatibility
+PAIRING_PENDING 280522
+PASS: real Android Keystore, encrypted credential storage, local pairing and HTTP task submission
+PASS: Android Keystore round-trip, tamper rejection and saved credentials after process recreation
+PASS: lose-send with original durable operation
+PASS: recover-send with original durable operation
+PASS: Android after-404, process death, same operation/body, exactly one real ACP dispatch
+PASS: lose-send with original durable operation
+PASS: recover-send with original durable operation
+PASS: Android after-401, process death, same operation/body, exactly one real ACP dispatch
+PASS: lose-send with original durable operation
+PASS: recover-send with original durable operation
+PASS: Android before, process death, same operation/body, exactly one real ACP dispatch
+WAITING_SECOND_DEVICE
+PASS: second device answered, Android rejected receipt clears pending operation
+PASS: notifications background service, delivery cursor, settings navigation and notification behavior
+PASS: notifications-denied background service, delivery cursor, settings navigation and notification behavior
+PASS: redesign-light real native send, allow/reject, stale approval cleanup, 320dp row, contrast and screenshots
+PASS: redesign-dark real native send, allow/reject, stale approval cleanup, 320dp row, contrast and screenshots
+s_glBindAttribLocation: bind attrib 0 name position
+s_glBindAttribLocation: bind attrib 1 name color
+s_glBindAttribLocation: bind attrib 2 name localCoord
+STREAM_GATE Android stream-check light existing|0
+STREAM_FIRST_MS 90
+STREAM_GATE Android stream-check light existing|1
+STREAM_GATE Android stream-check light existing|2
+STREAM_GATE Android stream-check light new|0
+STREAM_FIRST_MS 78
+STREAM_GATE Android stream-check light new|1
+STREAM_GATE Android stream-check light new|2
+FAIL: java.lang.IllegalStateException: Check failed.
+	at io.leoagent.app.StreamingChecks.run(StreamingChecks.kt:109)
+	at io.leoagent.app.SecurityInstrumentation.onStart(SecurityInstrumentation.kt:19)
+	at android.app.Instrumentation$InstrumentationThread.run(Instrumentation.java:2402)
+$TMPDIR/leoagent-android-8itm3acc/.codex/state_5.sqlite?mode=ro"))
+10-27 08:44:32 rpc spawn [acp 1dcfcc] pid=56205
+10-27 08:44:32 acp initialize sid=1dcfcc58e71241e3 attempt=1/2 pid=56205 seconds=0.045 ok
+
+thread 'tokio-rt-worker' (169553543) panicked at src/threads.rs:19:7:
+state_5: SqliteFailure(Error { code: CannotOpen, extended_code: 14 }, Some("unable to open database file: file:$TMPDIR/leoagent-android-8itm3acc/.codex/state_5.sqlite?mode=ro"))
+
+thread 'tokio-rt-worker' (169554214) panicked at src/threads.rs:19:7:
+state_5: SqliteFailure(Error { code: CannotOpen, extended_code: 14 }, Some("unable to open database file: file:$TMPDIR/leoagent-android-8itm3acc/.codex/state_5.sqlite?mode=ro"))
+
+thread 'tokio-rt-worker' (169553543) panicked at src/threads.rs:19:7:
+state_5: SqliteFailure(Error { code: CannotOpen, extended_code: 14 }, Some("unable to open database file: file:$TMPDIR/leoagent-android-8itm3acc/.codex/state_5.sqlite?mode=ro"))
+
+thread 'tokio-rt-worker' (169554620) panicked at src/threads.rs:19:7:
+state_5: SqliteFailure(Error { code: CannotOpen, extended_code: 14 }, Some("unable to open database file: file:$TMPDIR/leoagent-android-8itm3acc/.codex/state_5.sqlite?mode=ro"))
+
+thread 'tokio-rt-worker' (169554214) panicked at src/threads.rs:19:7:
+state_5: SqliteFailure(Error { code: CannotOpen, extended_code: 14 }, Some("unable to open database file: file:$TMPDIR/leoagent-android-8itm3acc/.codex/state_5.sqlite?mode=ro"))
+
+thread 'tokio-rt-worker' (169553543) panicked at src/threads.rs:19:7:
+state_5: SqliteFailure(Error { code: CannotOpen, extended_code: 14 }, Some("unable to open database file: file:$TMPDIR/leoagent-android-8itm3acc/.codex/state_5.sqlite?mode=ro"))
+
+thread 'tokio-rt-worker' (169553543) panicked at src/threads.rs:19:7:
+state_5: SqliteFailure(Error { code: CannotOpen, extended_code: 14 }, Some("unable to open database file: file:$TMPDIR/leoagent-android-8itm3acc/.codex/state_5.sqlite?mode=ro"))
+
+thread 'tokio-rt-worker' (169553543) panicked at src/threads.rs:19:7:
+state_5: SqliteFailure(Error { code: CannotOpen, extended_code: 14 }, Some("unable to open database file: file:$TMPDIR/leoagent-android-8itm3acc/.codex/state_5.sqlite?mode=ro"))
+
+thread 'tokio-rt-worker' (169554620) panicked at src/threads.rs:19:7:
+state_5: SqliteFailure(Error { code: CannotOpen, extended_code: 14 }, Some("unable to open database file: file:$TMPDIR/leoagent-android-8itm3acc/.codex/state_5.sqlite?mode=ro"))
+
+thread 'tokio-rt-worker' (169553543) panicked at src/threads.rs:19:7:
+state_5: SqliteFailure(Error { code: CannotOpen, extended_code: 14 }, Some("unable to open database file: file:$TMPDIR/leoagent-android-8itm3acc/.codex/state_5.sqlite?mode=ro"))
+
+thread 'tokio-rt-worker' (169553543) panicked at src/threads.rs:19:7:
+state_5: SqliteFailure(Error { code: CannotOpen, extended_code: 14 }, Some("unable to open database file: file:$TMPDIR/leoagent-android-8itm3acc/.codex/state_5.sqlite?mode=ro"))
+10-27 08:45:02 rpc spawn [acp eb8134] pid=56621
+10-27 08:45:02 acp initialize sid=eb8134abe88b49f2 attempt=1/2 pid=56621 seconds=0.032 ok
+
+thread 'tokio-rt-worker' (169553543) panicked at src/threads.rs:19:7:
+state_5: SqliteFailure(Error { code: CannotOpen, extended_code: 14 }, Some("unable to open database file: file:$TMPDIR/leoagent-android-8itm3acc/.codex/state_5.sqlite?mode=ro"))
+
+thread 'tokio-rt-worker' (169554620) panicked at src/threads.rs:19:7:
+state_5: SqliteFailure(Error { code: CannotOpen, extended_code: 14 }, Some("unable to open database file: file:$TMPDIR/leoagent-android-8itm3acc/.codex/state_5.sqlite?mode=ro"))
+
+thread 'tokio-rt-worker' (169554214) panicked at src/threads.rs:19:7:
+state_5: SqliteFailure(Error { code: CannotOpen, extended_code: 14 }, Some("unable to open database file: file:$TMPDIR/leoagent-android-8itm3acc/.codex/state_5.sqlite?mode=ro"))
+10-27 08:45:04 rpc spawn [acp b2213c] pid=56722
+10-27 08:45:04 acp initialize sid=b2213cd0af7545f3 attempt=1/2 pid=56722 seconds=0.034 ok
+
+thread 'tokio-rt-worker' (169554214) panicked at src/threads.rs:19:7:
+state_5: SqliteFailure(Error { code: CannotOpen, extended_code: 14 }, Some("unable to open database file: file:$TMPDIR/leoagent-android-8itm3acc/.codex/state_5.sqlite?mode=ro"))
+
+Isolated tasks: [('8387bcce-ca95-436a-8470-d024ae2dda56', 'succeeded'), ('5f111bc2-e1ab-45bb-a306-9aebaffb72fa', 'succeeded'), ('33ea83e5-8605-4556-9e9e-90b4965d216e', 'succeeded'), ('3b3cd3e3-c8db-4b7b-baf9-4ea45d34438e', 'succeeded'), ('81683b21-6739-4e5d-9654-d4cabf29fbf0', 'succeeded'), ('043726bc-25e6-47e0-8f34-cffadd38bd56', 'succeeded'), ('7fe49ef6-1e7f-4241-9989-1cabefe12c0a', 'succeeded'), ('6c33caf1-d19c-4d6e-b60d-71b35cbb0746', 'succeeded'), ('3b69e67f-b3af-4de3-83aa-12bce4126dc0', 'succeeded'), ('5c679d17-a287-4d3e-96bb-cdf575008c2f', 'succeeded'), ('b5da841d-8dc0-480f-aecc-a2c6ce2822b6', 'succeeded'), ('c3e65158-1159-438f-a260-b90a75141713', 'succeeded'), ('c727b998-e032-48f8-9a82-e4d5e19edccd', 'succeeded'), ('00fb1736-cdd9-4e75-81f5-4e77e21cdd39', 'succeeded'), ('b47adce2-b8fc-459f-82b4-757ab5eccf7a', 'succeeded'), ('af2d1552-e68a-4cf8-8171-089c3026bcfe', 'succeeded'), ('aeb9ddbc-7d71-4efb-8cda-2298781d9fa0', 'succeeded')]
+Isolated recent events: [(144, 'b2213cd0af7545f3', 1793061904.947455, 'turn', '{"state": "idle", "stopReason": "succeeded", "task_id": "aeb9ddbc-7d71-4efb-8cda-2298781d9fa0", "reason": "end_turn"}', 'aeb9ddbc-7d71-4efb-8cda-2298781d9fa0'), (143, 'b2213cd0af7545f3', 1793061904.946627, 'task', '{"task_id": "aeb9ddbc-7d71-4efb-8cda-2298781d9fa0", "state": "succeeded", "reason": "end_turn"}', 'aeb9ddbc-7d71-4efb-8cda-2298781d9fa0'), (142, 'b2213cd0af7545f3', 1793061904.945965, 'msg', '{"text": " STREAM_DONE"}', 'aeb9ddbc-7d71-4efb-8cda-2298781d9fa0'), (141, 'b2213cd0af7545f3', 1793061904.782351, 'msg', '{"text": " STREAM_SECOND"}', 'aeb9ddbc-7d71-4efb-8cda-2298781d9fa0'), (140, 'b2213cd0af7545f3', 1793061904.660703, 'msg', '{"text": "STREAM_FIRST 即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字即时文字"}', 'aeb9ddbc-7d71-4efb-8cda-2298781d9fa0'), (139, 'b2213cd0af7545f3', 1793061904.469492, 'turn', '{"state": "running", "task_id": "aeb9ddbc-7d71-4efb-8cda-2298781d9fa0"}', 'aeb9ddbc-7d71-4efb-8cda-2298781d9fa0'), (138, 'b2213cd0af7545f3', 1793061904.427856, 'task', '{"task_id": "aeb9ddbc-7d71-4efb-8cda-2298781d9fa0", "state": "running", "reason": null}', 'aeb9ddbc-7d71-4efb-8cda-2298781d9fa0'), (137, 'b2213cd0af7545f3', 1793061904.427233, 'task', '{"task_id": "aeb9ddbc-7d71-4efb-8cda-2298781d9fa0", "state": "queued"}', 'aeb9ddbc-7d71-4efb-8cda-2298781d9fa0')]
+Isolated fixture journal: {"prompt": "Android fixture", "pid": 54602, "child_pid": null}
+{"prompt": "slow Android fault-after-404", "pid": 54602, "child_pid": null}
+{"prompt": "slow Android fault-after-401", "pid": 54602, "child_pid": null}
+{"prompt": "slow Android fault-before", "pid": 54602, "child_pid": null}
+{"prompt": "approval Android stale", "pid": 54602, "child_pid": null}
+{"prompt": "slow Android notification background allowed", "pid": 54799, "child_pid": null}
+{"prompt": "slow Android notification foreground", "pid": 54799, "child_pid": null}
+{"prompt": "slow Android notification background denied", "pid": 54954, "child_pid": null}
+{"prompt": "approval Android redesign light", "pid": 55133, "child_pid": null}
+{"prompt": "approval Android redesign rejection light", "pid": 55133, "child_pid": null}
+{"prompt": "approval Android redesign stale light", "pid": 55133, "child_pid": null}
+{"prompt": "approval Android redesign dark", "pid": 56205, "child_pid": null}
+{"prompt": "approval Android redesign rejection dark", "pid": 56205, "child_pid": null}
+{"prompt": "approval Android redesign stale dark", "pid": 56205, "child_pid": null}
+{"prompt": "stream history seed", "pid": 56621, "child_pid": null}
+{"prompt": "Android stream-check light existing", "pid": 56621, "child_pid": null}
+{"prompt": "Android stream-check light new", "pid": 56722, "child_pid": null}
+
+Isolated release gates: ['17c0be66872002f902e8b6c3a33ca9558d41b064906f86fb198d40ead64915b0.0', '17c0be66872002f902e8b6c3a33ca9558d41b064906f86fb198d40ead64915b0.1', '8fe2f2591ede447bd94d81e398cb57d9d406b34f687183efb307127c3f912bf8.0', 'aa038c23b8cbc600b9176b2036152f38e84fbeb64e7dc14d03caf3368b97c6b9', '8fe2f2591ede447bd94d81e398cb57d9d406b34f687183efb307127c3f912bf8.1', '7b8a1d0e2c0d0c488f26b67c8351c036fcfe12e89c169f1b79034a8069c30328', '680317253ced1da7f7af9ee4c20e32a949e096c32eff8eda02562b976c548e72', '17c0be66872002f902e8b6c3a33ca9558d41b064906f86fb198d40ead64915b0.2', '8fe2f2591ede447bd94d81e398cb57d9d406b34f687183efb307127c3f912bf8.2']
+Traceback (most recent call last):
+  File "$WORKSPACE/tests/android_integration.py", line 274, in <module>
+    main()
+    ~~~~^^
+  File "$WORKSPACE/tests/android_integration.py", line 222, in main
+    assert "PASS:" in output and "FAIL:" not in output, output
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: s_glBindAttribLocation: bind attrib 0 name position
+s_glBindAttribLocation: bind attrib 1 name color
+s_glBindAttribLocation: bind attrib 2 name localCoord
+STREAM_GATE Android stream-check light existing|0
+STREAM_FIRST_MS 90
+STREAM_GATE Android stream-check light existing|1
+STREAM_GATE Android stream-check light existing|2
+STREAM_GATE Android stream-check light new|0
+STREAM_FIRST_MS 78
+STREAM_GATE Android stream-check light new|1
+STREAM_GATE Android stream-check light new|2
+FAIL: java.lang.IllegalStateException: Check failed.
+	at io.leoagent.app.StreamingChecks.run(StreamingChecks.kt:109)
+	at io.leoagent.app.SecurityInstrumentation.onStart(SecurityInstrumentation.kt:19)
+	at android.app.Instrumentation$InstrumentationThread.run(Instrumentation.java:2402)

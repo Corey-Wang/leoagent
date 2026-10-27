@@ -9,7 +9,6 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
-import android.provider.Settings
 import android.text.InputType
 import android.text.SpannableStringBuilder
 import android.text.Spanned
@@ -35,17 +34,21 @@ import okhttp3.Request
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/** Agent 标签页: Codex 对话 (由 MainActivity 托管) */
-class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act) {
+/** Agent 对话与左侧导航抽屉（由 MainActivity 托管）。 */
+class CodexPane(val act: AppCompatActivity, private val openSettings: () -> Unit) : android.content.ContextWrapper(act) {
     companion object { @Volatile var visibleSession: String? = null }
     private lateinit var drawer: DrawerLayout
     private lateinit var side: LinearLayout
     private lateinit var list: LinearLayout
+    private lateinit var conversation: LinearLayout
     private lateinit var scroll: ScrollView
     private lateinit var input: EditText
     private lateinit var sendBtn: TextView
     private lateinit var titleTv: TextView
     private lateinit var subTv: TextView
+    private lateinit var projectTv: TextView
+    private lateinit var composerAgent: TextView
+    private lateinit var approvalHost: LinearLayout
     private lateinit var thumbs: LinearLayout
     private val h = Handler(Looper.getMainLooper())
     private var projects = JSONArray()
@@ -70,47 +73,16 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
     private var permDialog: BottomSheetDialog? = null
     private val responseInFlight = HashSet<String>()
     @Volatile private var streamCall: Call? = null
+    private var streamThread: Thread? = null
+    private var streamOwner = -1
+    private var renderedEpoch = ""
     private var curMsg: MdView? = null; private var curMsgSb = StringBuilder()
     private var curThought: TextView? = null; private var curThoughtSb = StringBuilder()
     private val thoughts = ArrayList<View>()
     private var renderPending = false
     private var live = false
-    private var shown = 0; private var lastParse = 0L; private var twOn = false; private var acc = 0f
-    private var typing: View? = null
     private var pendingEcho: String? = null
-    private val tw = object : Runnable { override fun run() {
-        val m = curMsg; if (m == null) { twOn = false; return }
-        val total = curMsgSb.length
-        if (shown < total) {
-            // 匀速打字: 约 280ms 内追平积压 (上游约每 190ms 一批), 不足 1 字时累积
-            acc += maxOf((total - shown) * 16f / 280f, 0.35f); val n = acc.toInt(); acc -= n
-            if (n == 0) { h.postDelayed(this, 16); return }
-            val from = shown; shown = minOf(total, shown + n)
-            val now = android.os.SystemClock.uptimeMillis()
-            if (now - lastParse >= 60 || shown >= total) { m.setMd(curMsgSb.substring(0, shown)); lastParse = now }
-            else m.appendFast(curMsgSb.substring(from, shown))
-            stick()
-        }
-        if (shown < total) h.postDelayed(this, 16) else twOn = false
-    } }
-    private fun motionEnabled(): Boolean = runCatching {
-        Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f
-    }.getOrDefault(true)
-    private fun stick() { if (atBottom) scroll.post { scroll.scrollTo(0, maxOf(0, list.height - scroll.height)) } }
-    private fun showTyping() {
-        if (typing != null) return
-        val t = UI.text(this, "●  ●  ●", 14f, R.color.muted).apply { setPadding(dp(4), dp(10), 0, dp(6)) }
-        if (!motionEnabled()) {
-            t.alpha = 0.7f
-            typing = t
-            list.addView(t)
-            stick()
-            return
-        }
-        t.animate().alpha(0.25f).setDuration(600).withEndAction(object : Runnable { override fun run() { if (typing === t) t.animate().alpha(if (t.alpha < 0.5f) 1f else 0.25f).setDuration(600).withEndAction(this).start() } }).start()
-        typing = t; list.addView(t); stick()
-    }
-    private fun hideTyping() { typing?.let { list.removeView(it) }; typing = null }
+    private fun stick() { if (atBottom) scroll.post { scroll.scrollTo(0, maxOf(0, conversation.height - scroll.height)) } }
     private val images = ArrayList<Pair<String, String>>()
     private var atBottom = true
     private var unread = 0
@@ -126,7 +98,7 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
     private fun updateFab() {
         if (!::fab.isInitialized) return
         if (atBottom) unread = 0
-        val show = !atBottom && list.height > scroll.height * 2
+        val show = !atBottom && conversation.height > scroll.height * 2
         if (show && fab.visibility != View.VISIBLE) { fab.alpha = 0f; fab.visibility = View.VISIBLE; fab.animate().alpha(1f).setDuration(150).start() }
         if (!show) fab.visibility = View.GONE
         fabBadge.visibility = if (show && unread > 0) View.VISIBLE else View.GONE
@@ -146,64 +118,91 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
         // 顶栏
         val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(4), dp(6), dp(4), dp(6)) }
         bar.addView(iconBtn("☰") { drawer.openDrawer(GravityCompat.START) })
-        val tcol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
+        val tcol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.START; minimumHeight = dp(48); isFocusable = true; isFocusableInTouchMode = false
+            foreground = UI.focusForeground(context, DS.R_SM)
             background = UI.ripple(context, col(R.color.surface), 10); setPadding(dp(8), dp(2), dp(8), dp(2)); setOnClickListener { pickModel() } }
-        titleTv = UI.text(this, "Codex", 17f, R.color.text, true).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.CENTER }
-        subTv = UI.text(this, "", 12.5f, R.color.muted).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.CENTER }
+        titleTv = UI.text(this, "新对话", 16f, R.color.text, true).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.START }
+        subTv = UI.text(this, "", 12.5f, R.color.muted).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.START }
         tcol.addView(titleTv); tcol.addView(subTv)
         bar.addView(tcol, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         bar.addView(iconBtn("▣") { pip.toggle() }.apply { textSize = 20f; contentDescription = "桌面画中画" })
         bar.addView(iconBtn("±") { showDiff() })
         bar.addView(iconBtn("⋯") { moreMenu() })
         main.addView(bar)
+        projectTv = UI.text(this, "选择项目", 13f, R.color.primary).apply {
+            maxLines = 1; ellipsize = TextUtils.TruncateAt.MIDDLE
+            minimumHeight = dp(48); gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(20), 0, dp(20), 0)
+            val folder = getDrawable(R.drawable.ms_folder)!!.mutate().apply { setTint(col(R.color.muted)); setBounds(0, 0, dp(18), dp(18)) }
+            setCompoundDrawables(folder, null, null, null); compoundDrawablePadding = dp(8)
+            background = UI.ripple(context, col(R.color.surface2), 0)
+            foreground = UI.focusForeground(context, DS.R_SM)
+            isFocusable = true; isFocusableInTouchMode = false
+            contentDescription = "选择项目"; setOnClickListener { pickProject() }
+        }
+        main.addView(projectTv)
         connectionTv = UI.text(this, "", 12.5f, R.color.muted).apply {
             gravity = Gravity.CENTER; setPadding(dp(12), dp(4), dp(12), dp(4)); visibility = View.GONE
         }
         taskStatusTv = UI.text(this, "", 13f, R.color.primary).apply {
-            gravity = Gravity.CENTER; setPadding(dp(12), dp(5), dp(12), dp(5)); visibility = View.GONE
+            gravity = Gravity.START; setPadding(dp(20), dp(4), dp(20), dp(20)); visibility = View.GONE
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
             setOnClickListener { if (taskState == "unknown") reviewUnknownTask() else if (deliveryUnknown) reviewPending() }
         }
         main.addView(connectionTv)
-        main.addView(taskStatusTv)
         main.addView(View(this).apply { setBackgroundColor(col(R.color.border)) }, LinearLayout.LayoutParams(MATCH_PARENT, 1))
-        list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(10), dp(14), dp(24)) }
-        scroll = ScrollView(this).apply { addView(list); isFillViewport = true
-            viewTreeObserver.addOnScrollChangedListener { atBottom = !canScrollVertically(1) || (list.height - (scrollY + height) < dp(80)); updateFab(); if (scrollY < dp(40) && histMore && !loadingOlder && list.height > height) loadOlder() } }
+        list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(16), dp(20), dp(24)) }
+        conversation = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; addView(list); addView(taskStatusTv) }
+        scroll = ScrollView(this).apply { addView(conversation); isFillViewport = true
+            viewTreeObserver.addOnScrollChangedListener { atBottom = !canScrollVertically(1) || (conversation.height - (scrollY + height) < dp(80)); updateFab(); if (scrollY < dp(40) && histMore && !loadingOlder && list.height > height) loadOlder() } }
         list.setOnHierarchyChangeListener(object : android.view.ViewGroup.OnHierarchyChangeListener {
-            override fun onChildViewAdded(p: View?, c: View?) { if (!atBottom && c !== typing && c !== skeleton) { unread++; updateFab() } }
+            override fun onChildViewAdded(p: View?, c: View?) { if (!atBottom && c !== skeleton) { unread++; updateFab() } }
             override fun onChildViewRemoved(p: View?, c: View?) {} })
         val chatFrame = FrameLayout(this)
         chatFrame.addView(scroll, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         fab = FrameLayout(this).apply { visibility = View.GONE; elevation = dp(6).toFloat(); background = UI.round(context, col(R.color.surface), 22)
             addView(TextView(context).apply { text = "↓"; textSize = 20f; typeface = UI.BOLD; gravity = Gravity.CENTER; setTextColor(col(R.color.primary)) }, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
-            setOnClickListener { unread = 0; atBottom = true; scroll.smoothScrollTo(0, maxOf(0, list.height - scroll.height)); updateFab() }; contentDescription = "回到最新" }
-        fabBadge = TextView(this).apply { textSize = 10f; setTextColor(android.graphics.Color.WHITE); gravity = Gravity.CENTER; background = UI.round(context, col(R.color.primary), 9); setPadding(dp(4), 0, dp(4), 0); visibility = View.GONE; elevation = dp(7).toFloat() }
-        chatFrame.addView(fab, FrameLayout.LayoutParams(dp(44), dp(44), Gravity.BOTTOM or Gravity.END).apply { setMargins(0, 0, dp(16), dp(16)) })
+            setOnClickListener { unread = 0; atBottom = true; scroll.smoothScrollTo(0, maxOf(0, conversation.height - scroll.height)); updateFab() }; contentDescription = "回到最新" }
+        fabBadge = TextView(this).apply { textSize = 10f; setTextColor(android.graphics.Color.WHITE); gravity = Gravity.CENTER; background = UI.round(context, col(R.color.primaryFill), 9); setPadding(dp(4), 0, dp(4), 0); visibility = View.GONE; elevation = dp(7).toFloat() }
+        chatFrame.addView(fab, FrameLayout.LayoutParams(dp(48), dp(48), Gravity.BOTTOM or Gravity.END).apply { setMargins(0, 0, dp(16), dp(16)) })
         chatFrame.addView(fabBadge, FrameLayout.LayoutParams(WRAP_CONTENT, dp(18), Gravity.BOTTOM or Gravity.END).apply { setMargins(0, 0, dp(12), dp(46)) })
         pip = ScreenPip(chatFrame)
         main.addView(chatFrame, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
-        // 输入区
+        approvalHost = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+        main.addView(approvalHost, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        // 文本独占一行，附件、Agent、语音和发送在下方，窄屏也保留完整输入宽度。
         thumbs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(14), dp(6), dp(14), 0); visibility = View.GONE }
         main.addView(thumbs)
-        val comp = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.BOTTOM; setPadding(dp(10), dp(8), dp(10), dp(10)) }
-        comp.addView(circle("＋", R.color.surface, R.color.text) { pickImage() }, LinearLayout.LayoutParams(dp(40), dp(40)))
+        val comp = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(8), dp(4), dp(8), dp(6)); background = UI.outline(context, R.color.composerBg, 16) }
+        val inputRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         input = EditText(this).apply {
-            hint = "给 Codex 发消息"; textSize = 17f; setTextColor(col(R.color.text)); setHintTextColor(col(R.color.muted)); maxLines = 6; minHeight = dp(40)
+            hint = "给 Codex 发消息"; textSize = 16f; setTextColor(col(R.color.text)); setHintTextColor(col(R.color.muted)); maxLines = 4; minHeight = dp(48)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            background = UI.card(context, 22); setPadding(dp(16), dp(10), dp(16), dp(10))
+            background = null; setPadding(dp(8), dp(12), dp(8), dp(12)); contentDescription = "任务描述"
         }
-        comp.addView(input, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { setMargins(dp(8), 0, dp(8), 0) })
-        VoiceInput(act, input, comp) { if (!running) send() }
+        inputRow.addView(input, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        comp.addView(inputRow)
+        val controls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        controls.addView(circle("＋", R.color.composerBg, R.color.muted) { pickImage() }, LinearLayout.LayoutParams(dp(48), dp(48)))
+        composerAgent = UI.text(this, "Codex ▾", 13f, R.color.muted).apply {
+            gravity = Gravity.CENTER; minimumHeight = dp(48); maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+            setPadding(dp(8), 0, dp(8), 0); isFocusable = true; isFocusableInTouchMode = false
+            background = UI.ripple(context, col(R.color.composerBg), 10); foreground = UI.focusForeground(context, 10)
+            contentDescription = "选择 Agent 或模型"; setOnClickListener { if (sid == null && usable().size > 1) pickAgent() else pickModel() }
+        }
+        controls.addView(composerAgent, LinearLayout.LayoutParams(0, dp(48), 1f))
+        VoiceInput(act, input, inputRow, controls) { if (!running) send() }
         sendBtn = circle("↑", R.color.primary, android.R.color.white) { if (running) stop() else send() }
-        comp.addView(sendBtn, LinearLayout.LayoutParams(dp(40), dp(40)))
-        main.addView(comp)
+        controls.addView(sendBtn, LinearLayout.LayoutParams(dp(48), dp(48)).apply { leftMargin = dp(8) })
+        comp.addView(controls)
+        main.addView(comp, UI.lp(this, 14, 12, 14, 12))
         drawer.addView(main, DrawerLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         side = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = UI.pageBg(context) }
-        drawer.addView(side, DrawerLayout.LayoutParams(dp(300), MATCH_PARENT, Gravity.START))
+        drawer.addView(side, DrawerLayout.LayoutParams(minOf(dp(320), resources.displayMetrics.widthPixels - dp(32)), MATCH_PARENT, Gravity.START))
         drawer.addDrawerListener(object : DrawerLayout.SimpleDrawerListener() { override fun onDrawerOpened(v: View) { loadThreads() } })
         root = drawer
         sid = initSid ?: CxPrefs.session(this)
-        refreshMeta(); openSession(sid)
+        buildDrawer(); refreshMeta(); openSession(sid)
         return drawer
     }
     fun back(): Boolean { if (drawer.isDrawerOpen(GravityCompat.START)) { drawer.closeDrawers(); return true }; return false }
@@ -227,7 +226,7 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
 
     // ───────── 组件 ─────────
     private val GLYPH = mapOf("☰" to R.drawable.ms_menu, "±" to R.drawable.ms_difference, "⋯" to R.drawable.ms_more_horiz, "✕" to R.drawable.ms_close,
-        "＋" to R.drawable.ms_add, "↑" to R.drawable.ms_arrow_upward, "■" to R.drawable.ms_stop)
+        "＋" to R.drawable.ms_add, "↑" to R.drawable.ms_arrow_upward, "■" to R.drawable.ms_stop, "▣" to R.drawable.ms_fullscreen)
     private val GLYPH_LABEL = mapOf(
         "☰" to "打开对话列表",
         "±" to "查看文件差异",
@@ -247,7 +246,7 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
     }
     private fun circle(s: String, bgc: Int, fg: Int, f: () -> Unit) = TextView(this).apply {
         text = s; textSize = 20f; typeface = UI.BOLD; gravity = Gravity.CENTER; setTextColor(col(fg)); tag = intArrayOf(bgc, fg)
-        GLYPH[s]?.let { UI.glyph(context, this, it, col(fg), if (bgc == R.color.primary) UI.grad(context, 20) else UI.card(context, 20), 22) } ?: run { background = UI.ripple(context, col(bgc), 20) }
+        GLYPH[s]?.let { UI.glyph(context, this, it, col(fg), if (bgc == R.color.primary) UI.grad(context, 12) else UI.round(context, col(bgc), 12), 22) } ?: run { background = UI.ripple(context, col(bgc), 20) }
         contentDescription = GLYPH_LABEL[s] ?: s
         isFocusable = true; isFocusableInTouchMode = false
         foreground = UI.focusForeground(context, DS.R_SM)
@@ -255,15 +254,18 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
     }
     private fun setRunning(r: Boolean) {
         running = r
-        UI.glyph(this, sendBtn, if (r) R.drawable.ms_stop else R.drawable.ms_arrow_upward, 0xFFFFFFFF.toInt(), UI.grad(this, 20), if (r) 20 else 22)
+        UI.glyph(this, sendBtn, if (r) R.drawable.ms_stop else R.drawable.ms_arrow_upward, 0xFFFFFFFF.toInt(), UI.grad(this, 12), if (r) 20 else 22)
         sendBtn.contentDescription = if (r) "停止任务" else "发送消息"
     }
     private fun updateTaskStatus() {
         if (!::taskStatusTv.isInitialized) return
-        taskStatusTv.text = if (deliveryUnknown) "提交结果尚未确认 · 点此核对" else when (taskState) {
+        taskStatusTv.text = if (deliveryUnknown) "提交结果尚未确认 · 点此核对"
+        else if (responseInFlight.isNotEmpty()) "已提交回复，等待电脑回执"
+        else when (taskState) {
+            "submitting" -> "正在发送…"
             "queued" -> "任务已接受，正在准备"
             "running" -> "Agent 正在执行"
-            "waiting_approval" -> "等待你的审批"
+            "waiting_approval" -> if (::approvalHost.isInitialized && approvalHost.isShown) "" else "等待你的审批"
             "waiting_input" -> "等待你的回答"
             "cancelling" -> "正在停止，等待 Agent 确认"
             "recovering" -> "电脑正在核对任务状态"
@@ -274,6 +276,7 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
             else -> ""
         }
         taskStatusTv.visibility = if (taskStatusTv.text.isEmpty()) View.GONE else View.VISIBLE
+        stick()
     }
     private fun setConnection(message: String) {
         connectionMessage = message
@@ -303,22 +306,36 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
     private fun buildDrawer() {
         side.removeAllViews()
         val na = newAgent(); val multi = usable().size > 1
-        side.addView(UI.text(this, agentName(na) + if (multi) "  ⌄" else "", 24f, R.color.text, true).apply { setPadding(dp(18), dp(18), dp(18), dp(4))
-            if (multi) { background = UI.ripple(context, col(R.color.bg), 10); setOnClickListener { pickAgent() } } })
-        side.addView(UI.text(this, "运行在你的 Mac" + (if (multi && CxPrefs.agentFilter(this)) " · 仅显示 ${agentName(na)} 会话" else ""), 12.5f, R.color.muted).apply { setPadding(dp(18), 0, dp(18), dp(10)) })
+        val heading = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(20), dp(12), dp(12), dp(8)) }
+        heading.addView(UI.text(this, "项目与会话", 17f, R.color.text, true), LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        heading.addView(UI.text(this, agentName(na) + if (multi) " ▾" else "", 13f, R.color.muted).apply {
+            minimumHeight = dp(48); gravity = Gravity.CENTER; setPadding(dp(8), 0, dp(8), 0)
+            if (multi) { isFocusable = true; isFocusableInTouchMode = false; contentDescription = "选择 Agent"; foreground = UI.focusForeground(context, DS.R_SM); setOnClickListener { pickAgent() } }
+        })
+        side.addView(heading)
         val pid = CxPrefs.project(this)
-        val pg = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = UI.round(context, col(R.color.surface), 12) }
-        side.addView(pg, UI.lp(this, 12, 0, 12, 0))
-        UI.row(this, pg, "📁  " + projName(pid), null, sub = projPath(pid)) { pickProject() }
-        side.addView(UI.filledButton(this, "＋  新对话") { newChat() }.apply { textSize = 16f }, UI.lp(this, 12, 10, 12, 6))
-        val search = EditText(this).apply { hint = "搜索会话"; textSize = 14.5f; isSingleLine = true; setTextColor(col(R.color.text)); setHintTextColor(col(R.color.muted))
+        val pg = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), dp(16))
+            background = UI.ripple(context, col(R.color.bg), 0); isFocusable = true; isFocusableInTouchMode = false
+            contentDescription = "选择项目，${projName(pid)}"; foreground = UI.focusForeground(context, DS.R_SM); setOnClickListener { pickProject() }
+        }
+        pg.addView(UI.text(this, if (multi && CxPrefs.agentFilter(this)) "当前项目，已按 Agent 筛选" else "当前项目", 12f, R.color.muted))
+        pg.addView(UI.text(this, projName(pid), 28f, R.color.text, true).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END })
+        pg.addView(UI.text(this, projPath(pid).orEmpty(), 13f, R.color.muted).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.MIDDLE; setPadding(0, dp(4), 0, 0) })
+        side.addView(pg)
+        val search = EditText(this).apply { hint = "搜索会话"; textSize = 14.5f; isSingleLine = true; minHeight = dp(48); contentDescription = "搜索会话"; setTextColor(col(R.color.text)); setHintTextColor(col(R.color.muted))
             background = UI.round(context, col(R.color.surface2), 10); setPadding(dp(12), dp(8), dp(12), dp(8)); setText(threadQuery) }
-        side.addView(search, UI.lp(this, 12, 4, 12, 4))
+        side.addView(search, UI.lp(this, 20, 0, 20, 8))
         val sl = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 0, 0, dp(8)) }
         side.addView(ScrollView(this).apply { addView(sl) }, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
+        side.addView(UI.filledButton(this, "新对话") { newChat() }.apply { textSize = 16f }, UI.lp(this, 20, 12, 20, 6))
         val g = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = UI.round(context, col(R.color.surface), 12) }
         side.addView(g, UI.lp(this, 12, 6, 12, 14))
-        UI.row(this, g, "设置", null) { settings() }
+        UI.row(this, g, "设置", null) {
+            drawer.closeDrawers()
+            (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(root.windowToken, 0)
+            openSettings()
+        }
         search.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(e: android.text.Editable?) { threadQuery = e.toString().trim(); h.removeCallbacks(searchR); h.postDelayed(searchR, 300) }
             override fun beforeTextChanged(a: CharSequence?, b: Int, c: Int, d: Int) {}
@@ -326,23 +343,51 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
         threadList = sl; loadThreads()
     }
     private var threadQuery = ""
+    private var threadGeneration = 0
     private var threadList: LinearLayout? = null
     private val expanded = HashSet<String>()
     private val searchR = Runnable { loadThreads() }
     /** 会话列表 = Codex 自己的线程库 (与桌面端一致: 置顶 / 项目分组 / 对话, 最近优先) */
     private fun loadThreads() {
         val sl = threadList ?: return
+        if (!Prefs.configured(this)) { sl.removeAllViews(); UI.empty(this, sl, "连接服务器后显示会话"); return }
+        val query = threadQuery; val generation = ++threadGeneration
+        val filter = if (CxPrefs.agentFilter(this) && usable().size > 1) newAgent() else null
+        val connection = Cx.connection(this)
         bg {
-            val r = Cx.req(this, "GET", "/threads?q=" + Uri.encode(threadQuery) + (if (CxPrefs.agentFilter(this) && usable().size > 1) "&agent=" + newAgent() else ""))
+            var r = Cx.req(this, "GET", "/threads?q=" + Uri.encode(query) + (filter?.let { "&agent=$it" } ?: ""), connection = connection)
+            var phoneOnly = false
+            // Desktop thread storage is optional; the bridge still owns usable phone sessions.
+            if (r.first in setOf(404, 500, 501, 503) && filter == null) {
+                val local = Cx.req(this, "GET", "/sessions", connection = connection)
+                if (local.first == 200) {
+                    val sessions = runCatching { JSONArray(local.second) }.getOrNull()
+                    if (sessions != null) {
+                        val rows = JSONArray()
+                        for (i in 0 until sessions.length()) {
+                            val t = sessions.getJSONObject(i)
+                            if (query.isNotEmpty() && !(t.optString("title") + " " + t.optString("project")).contains(query, ignoreCase = true)) continue
+                            t.put("sid", t.optString("id")).put("id", JSONObject.NULL).put("origin", "phone")
+                            rows.put(t)
+                        }
+                        r = 200 to rows.toString(); phoneOnly = true
+                    }
+                }
+            }
             runOnUiThread {
+                if (generation != threadGeneration || !connection.isCurrent(this)) return@runOnUiThread
                 sl.removeAllViews()
-                if (r.first != 200) { sl.addView(UI.text(this, Cx.err(r), 14f, R.color.muted).apply { setPadding(dp(24), dp(8), dp(24), 0) }); return@runOnUiThread }
+                if (r.first != 200) {
+                    UI.row(this, sl, "会话列表暂不可用", sub = "点击重试，或检查电脑连接") { loadThreads() }
+                    return@runOnUiThread
+                }
+                if (phoneOnly) sl.addView(UI.text(this, "桌面会话暂不可用，以下显示手机会话", 13f, R.color.muted).apply { setPadding(dp(24), dp(8), dp(24), dp(8)) })
                 val a = JSONArray(r.second); val all = (0 until a.length()).map { a.getJSONObject(it) }
-                if (all.isEmpty()) { sl.addView(UI.text(this, if (threadQuery.isEmpty()) "还没有会话" else "没有匹配的会话", 14f, R.color.muted).apply { setPadding(dp(24), dp(10), dp(24), 0) }); return@runOnUiThread }
+                if (all.isEmpty()) { sl.addView(UI.text(this, if (query.isEmpty()) "还没有会话" else "没有匹配的会话", 14f, R.color.muted).apply { setPadding(dp(24), dp(10), dp(24), 0) }); return@runOnUiThread }
                 val pinned = all.filter { it.optBoolean("pinned") }
                 val inProj = all.filter { !it.optBoolean("pinned") && !it.isNull("project") && it.optString("project").isNotEmpty() }
                 val chats = all.filter { !it.optBoolean("pinned") && (it.isNull("project") || it.optString("project").isEmpty()) }
-                if (threadQuery.isNotEmpty()) { all.forEach { threadRow(sl, it) }; return@runOnUiThread }   // 搜索: 平铺
+                if (query.isNotEmpty()) { all.forEach { threadRow(sl, it) }; return@runOnUiThread }   // 搜索: 平铺
                 val openSet = folderOpen()
                 fun isCur(t: JSONObject) = (t.optString("sid").isNotEmpty() && t.optString("sid") == sid) || (!t.isNull("id") && t.optString("id") == session?.optString("acp_sid"))
                 val anyCur = all.any { isCur(it) }
@@ -351,11 +396,12 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
                     val hasCur = items.any { isCur(it) } || (!anyCur && sid != null && key == session?.optString("project"))
                     if (hasCur && autoOpened != sid) { openSet.add(key); autoOpened = sid; saveFolders(openSet) }
                     val open = key in openSet
-                    val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(46)
+                    val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(48); isFocusable = true; isFocusableInTouchMode = false; foreground = UI.focusForeground(context, DS.R_SM)
                         setPadding(dp(12), 0, dp(12), 0); background = UI.ripple(context, col(R.color.bg), 12)
                         setOnClickListener { if (key in openSet) openSet.remove(key) else openSet.add(key); saveFolders(openSet); loadThreads() } }
-                    val ic = when (key) { "_pin" -> "📌"; "_chats" -> "💬"; else -> "📁" }
-                    row.addView(UI.text(this, ic, 15f, R.color.text).apply { setPadding(0, 0, dp(10), 0) })
+                    row.addView(UI.icon(this, if (key == "_chats") R.drawable.ms_forum else R.drawable.ms_folder, R.color.muted, 18).apply {
+                        minimumWidth = 0; minimumHeight = 0; setPadding(0, 0, 0, 0); isFocusable = false; importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    }, LinearLayout.LayoutParams(dp(18), dp(18)).apply { rightMargin = dp(10) })
                     row.addView(UI.text(this, name, 15f, R.color.text, true).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
                     if (hasCur && !open) row.addView(View(this).apply { background = UI.round(context, col(R.color.primary), 4) }, LinearLayout.LayoutParams(dp(7), dp(7)).apply { rightMargin = dp(8) })
                     row.addView(UI.text(this, items.size.toString(), 12f, R.color.muted).apply { background = UI.round(context, col(R.color.surface2), 10); setPadding(dp(8), dp(1), dp(8), dp(1)) })
@@ -383,8 +429,9 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
     private fun threadRow(sl: LinearLayout, t: JSONObject, nested: Boolean = false) {
         val sidT = t.optString("sid").ifEmpty { null }; val tid = if (t.isNull("id")) null else t.optString("id")
         val cur = (sidT != null && sidT == sid) || (tid != null && tid == session?.optString("acp_sid"))
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(8), dp(14), dp(8))
-            background = UI.ripple(context, col(if (cur) R.color.surface2 else R.color.bg), 10) }
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; minimumHeight = dp(64); setPadding(dp(14), dp(12), dp(14), dp(12))
+            isFocusable = true; isFocusableInTouchMode = false; foreground = UI.focusForeground(context, DS.R_SM)
+            background = UI.ripple(context, col(if (cur) R.color.primaryC else R.color.bg), 12) }
         box.addView(UI.text(this, (if (t.optBoolean("running")) "● " else "") + t.optString("title"), 15f, R.color.text).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
         val origin = when (t.optString("origin")) { "desktop" -> "桌面"; "cli" -> "CLI"; "phone" -> "手机"; "acp" -> "ACP"; else -> "" }
         val sub = SpannableStringBuilder(ago(t.optDouble("updated")))
@@ -395,6 +442,8 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
         else if (t.optBoolean("active")) { val st = sub.length; sub.append(" · 活跃"); sub.setSpan(ForegroundColorSpan(col(R.color.down)), st, sub.length, 0) }
         if (t.isNull("project") || t.optString("project").isEmpty()) sub.append(" · ").append(t.optString("cwd").substringAfterLast('/'))
         box.addView(UI.text(this, sub, 12f, R.color.muted).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END; setPadding(0, dp(1), 0, 0) })
+        box.tag = sidT
+        box.contentDescription = "打开会话，${t.optString("title")}"
         box.setOnClickListener { drawer.closeDrawers(); openThread(t) }
         if (sidT != null) box.setOnLongClickListener { sessionMenu(JSONObject().put("id", sidT).put("title", t.optString("title")).put("codex", tid != null)); true }
         sl.addView(box, UI.lp(this, if (nested) 30 else 8, 0, 8, 1))
@@ -477,22 +526,6 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
         AlertDialog.Builder(this).setTitle(title).setView(FrameLayout(this).apply { setPadding(dp(20), dp(8), dp(20), 0); addView(e) })
             .setPositiveButton("确定") { _, _ -> f(e.text.toString().trim()) }.setNegativeButton("取消", null).show()
     }
-    fun settings() {
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), 0) }
-        box.addView(UI.text(this, "设备凭据（加密保存）", 13f, R.color.muted))
-        val e = EditText(this).apply {
-            setText(CxPrefs.token(context)); textSize = 13f
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-        }; box.addView(e)
-        val sw = Switch(this).apply { text = "新对话默认每条命令都审批"; isChecked = CxPrefs.mode(context) == "ask"; textSize = 15f; setPadding(0, dp(12), 0, 0) }; box.addView(sw)
-        box.addView(UI.text(this, "关闭 = 在项目内自由运行（Codex 默认，只有高风险操作才会请求审批）", 12f, R.color.muted))
-        box.addView(UI.text(this, "Agent 管理（启用 / 默认）  ›", 15f, R.color.primary).apply { setPadding(0, dp(16), 0, dp(4)); setOnClickListener { agentSettings() } })
-        AlertDialog.Builder(this).setTitle("设置").setView(box).setPositiveButton("保存") { _, _ ->
-            if (!CxPrefs.setToken(this, e.text.toString())) { toast("无法加密保存设备凭据"); return@setPositiveButton }
-            CxPrefs.setMode(this, if (sw.isChecked) "ask" else "auto"); refreshMeta()
-        }.setNegativeButton("取消", null).show()
-    }
-
     // ───────── 模型 / 模式 ─────────
     private fun curModel() = session?.optString("model")?.ifEmpty { null } ?: CxPrefs.model(this)
     private fun curEffort() = session?.optString("effort")?.ifEmpty { null } ?: CxPrefs.effort(this)
@@ -500,9 +533,14 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
     private fun modelName(id: String): String { for (i in 0 until models.length()) models.getJSONObject(i).let { if (it.getString("id") == id) return it.optString("name", id) }; return id.ifEmpty { "默认模型" } }
     private fun updateTitle() {
         titleTv.text = session?.optString("title")?.ifEmpty { null } ?: "新对话"
+        val pid = session?.optInt("project_id") ?: CxPrefs.project(this)
+        projectTv.text = projName(pid) + if (curMode() == "ask") "  /  逐条审批" else "  /  项目内运行"
+        projectTv.contentDescription = "选择项目，${projName(pid)}"
         val ag = curAgent(); input.hint = "给 ${agentName(ag)} 发消息"
-        if (ag != "codex") { val mo = cfgValueName("model"); subTv.text = "${projName(session?.optInt("project_id") ?: CxPrefs.project(this))} · ${agentIcon(ag)} ${agentName(ag)}${if (mo.isNotEmpty()) " · $mo" else ""} ▾"; return }
-        subTv.text = "${projName(session?.optInt("project_id") ?: CxPrefs.project(this))} · ${modelName(curModel())} ${curEffort()}${if (curMode() == "ask") " · 审批" else ""}${if (session?.optString("backend") == "desktop") " · 🖥同步" else ""} ▾"
+        composerAgent.text = "${agentName(ag)} ▾"
+        subTv.text = if (ag != "codex") "${agentName(ag)} ${cfgValueName("model")} ▾"
+            else "${modelName(curModel())} · ${curEffort()}${if (session?.optString("backend") == "desktop") " · 桌面同步" else ""} ▾"
+
     }
     fun pickDefaultModel(done: () -> Unit) = pickModel(done, true)
     /** 非 Codex: configOptions 里某项当前值的显示名 */
@@ -572,8 +610,9 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
     // ───────── 会话与流 ─────────
     private fun newChat() { drawer.closeDrawers(); openSession(null) }
     private fun clearChat() {
-        hideTyping(); h.removeCallbacks(tw); twOn = false; pendingEcho = null
-        permDialog?.dismiss(); permDialog = null; permShown = null
+        pendingEcho = null; renderedEpoch = ""
+        h.removeCallbacks(renderR); renderScheduled = false; renderPending = false
+        clearApproval()
         list.removeAllViews(); tools.clear(); perms.clear(); askCards.clear(); thoughts.clear(); curMsg = null; curThought = null; lastSeq = 0; setRunning(false)
         taskId = null; taskState = "idle"; olderBtn = null; updateTaskStatus()
     }
@@ -639,7 +678,7 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
                 val t3 = System.currentTimeMillis()
                 if (!same) { clearChatKeep(); renderHistory(ho, false) } else status(ho)
                 android.util.Log.i("leoperf", "v14 net=${t1 - t0} md=${t2 - t1} render=${System.currentTimeMillis() - t3} n=${ho.optJSONArray("events")?.length()} bytes=${e.second.length} cached=${c != null}")
-                startStream()
+                startStream(initialSnapshot = ho)
             }
         }
     }
@@ -647,6 +686,7 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
     private var histMode = false
     private fun renderHistory(ho: JSONObject, fromCache: Boolean) {
         hideSkeleton()
+        renderedEpoch = ho.optString("data_epoch")
         histFirst = ho.optLong("first"); histMore = ho.optBoolean("more")
         if (histMore) addOlderBtn()
         val a = ho.getJSONArray("events"); histMode = true
@@ -654,7 +694,7 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
         histMode = false; lastSeq = ho.optLong("last")
         if (!fromCache) status(ho)
         pendingBanner?.let { list.addView(UI.text(this, it, 12.5f, R.color.muted).apply { gravity = Gravity.CENTER; setPadding(dp(8), dp(4), dp(8), dp(10)) }, if (olderBtn != null) 1 else 0); if (!fromCache) pendingBanner = null }
-        renderNow(); scrollEnd(true); scroll.post { scroll.scrollTo(0, maxOf(0, list.height - scroll.height)) }
+        renderNow(); scrollEnd(true); scroll.post { scroll.scrollTo(0, maxOf(0, conversation.height - scroll.height)) }
     }
     private fun addOlderBtn() {
         val b = UI.text(this, "加载更早的消息", 13.5f, R.color.primary).apply { gravity = Gravity.CENTER; setPadding(0, dp(10), 0, dp(12)); setOnClickListener { loadOlder() } }
@@ -673,11 +713,11 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
                 if (ho == null) { olderBtn?.text = "加载失败，点此重试"; return@runOnUiThread }
                 // 把旧消息渲染进临时容器再插到顶部, 保持当前阅读位置
                 val keep = list; val tmp = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-                val sv = arrayOf<Any?>(curMsg, curMsgSb, curThought, curThoughtSb, shown)
+                val sv = arrayOf<Any?>(curMsg, curMsgSb, curThought, curThoughtSb)
                 closeBlocks(); list = tmp; histMode = true
                 val a = ho.getJSONArray("events"); for (i in 0 until a.length()) apply(a.getJSONObject(i))
                 closeBlocks(); histMode = false; list = keep
-                curMsg = sv[0] as MdView?; curMsgSb = sv[1] as StringBuilder; curThought = sv[2] as TextView?; curThoughtSb = sv[3] as StringBuilder; shown = sv[4] as Int
+                curMsg = sv[0] as MdView?; curMsgSb = sv[1] as StringBuilder; curThought = sv[2] as TextView?; curThoughtSb = sv[3] as StringBuilder
                 olderBtn?.let { list.removeView(it) }; olderBtn = null
                 histFirst = ho.optLong("first"); histMore = ho.optBoolean("more")
                 val before = list.height; val views = (0 until tmp.childCount).map { tmp.getChildAt(it) }; tmp.removeAllViews()
@@ -701,10 +741,16 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
         }, UI.lp(this, t = 10))
     }
     private fun status(o: JSONObject) {
-        setRunning(o.optBoolean("running"))
-        taskState = o.optString("task_state", o.optJSONObject("task")?.optString("state") ?: "idle")
-        taskId = o.optJSONObject("task")?.optString("id")?.takeIf { it.isNotEmpty() }
-        if (taskState == "unknown") setRunning(false)
+        // A snapshot taken before the prompt arrived must not hide its local sending feedback.
+        val incomingTask = o.optJSONObject("task")?.optString("id")?.takeIf { it.isNotEmpty() }
+        val awaitingLocal = pendingEcho != null && taskState in setOf("submitting", "queued") &&
+            (taskId == null || incomingTask != taskId)
+        if (!awaitingLocal) {
+            setRunning(o.optBoolean("running"))
+            taskState = o.optString("task_state", o.optJSONObject("task")?.optString("state") ?: "idle")
+            taskId = incomingTask
+            if (taskState == "unknown") setRunning(false)
+        }
         val p = o.optJSONArray("pending") ?: JSONArray(); val live = (0 until p.length()).map { p.getString(it) }.toSet()
         perms.keys.retainAll(live)
         o.optJSONArray("interactions")?.let { interactions ->
@@ -726,15 +772,17 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
             responseInFlight.retainAll(liveIds)
         }
         if (permShown != null && !perms.containsKey(permShown)) {
-            permDialog?.dismiss(); permDialog = null; permShown = null
+            clearApproval()
         }
         updateTaskStatus(); showNextPerm()
     }
-    private fun startStream() {
+    private fun startStream(refresh: Boolean = true, initialSnapshot: JSONObject? = null) {
         if (!paneVisible) return
         val s = sid ?: return
+        if (!refresh && streamOwner == gen && streamThread?.isAlive == true) return
         streamCall?.cancel()
         val g = ++gen
+        streamOwner = g
         val host = Prefs.url(this); val token = Prefs.token(this)
         fun active() = g == gen && paneVisible && !stopped && host == Prefs.url(this)
         fun ui(action: () -> Unit): Boolean {
@@ -742,11 +790,12 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
             h.post { try { if (active()) action() } finally { done.countDown() } }
             return done.await(5, TimeUnit.SECONDS) && active()
         }
-        Thread {
+        streamThread = Thread {
             var fails = 0
-            var resnapshot = true
-            var epoch = ""
-            var generation = ""
+            var resnapshot = initialSnapshot == null
+            var rebuild = false
+            var epoch = initialSnapshot?.optString("data_epoch") ?: ""
+            var generation = initialSnapshot?.optString("server_generation") ?: ""
             while (active()) {
                 try {
                     if (resnapshot) {
@@ -758,19 +807,25 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
                         generation = data.optString("server_generation")
                         if (!ui {
                             deliveryUnknown = recovered.any { it.unknown }
-                            clearChatKeep(); renderHistory(data, false); setConnection("")
+                            // Keep the visible cursor until SSE has replayed every missing event.
+                            // The snapshot cursor is global and may include unseen session events.
+                            val keep = !rebuild && lastSeq <= data.optLong("last") &&
+                                (renderedEpoch == epoch || (renderedEpoch.isEmpty() && pendingEcho != null && lastSeq == 0L))
+                            if (keep) { renderedEpoch = epoch; status(data) }
+                            else { clearChatKeep(); renderHistory(data, false) }
+                            setConnection("")
                         }) break
-                        resnapshot = false
+                        resnapshot = false; rebuild = false
                     }
                     if (fails < 3) {
                         val client = Http.client.newBuilder().readTimeout(45, TimeUnit.SECONDS)
                             .followRedirects(false).followSslRedirects(false).build()
                         val call = client.newCall(Request.Builder().url("$host/api/v1/sessions/$s/stream?after=$lastSeq")
-                            .header("X-Token", token).header("X-Data-Epoch", epoch).header("Accept", "text/event-stream").build())
+                            .header("User-Agent", "leoagent-android").header("X-Token", token).header("X-Data-Epoch", epoch).header("Accept", "text/event-stream").build())
                         streamCall = call
                         try {
                             call.execute().use { response ->
-                                if (response.code == 409) resnapshot = true
+                                if (response.code == 409) { resnapshot = true; rebuild = true }
                                 if (response.code != 200) throw Exception("stream ${response.code}")
                                 fails = 0
                                 if (!ui { setConnection("") }) return@Thread
@@ -807,8 +862,8 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
                         }
                     } else {
                         val (code, text) = Http.call("$host/api/v1/sessions/$s/events?after=$lastSeq&wait=20",
-                            headers = mapOf("X-Token" to token, "X-Data-Epoch" to epoch), readTimeoutMs = 35000)
-                        if (code == 409) resnapshot = true
+                            headers = mapOf("User-Agent" to "leoagent-android", "X-Token" to token, "X-Data-Epoch" to epoch), readTimeoutMs = 35000)
+                        if (code == 409) { resnapshot = true; rebuild = true }
                         if (code != 200) throw Exception("events $code")
                         val o = JSONObject(text)
                         if (o.optString("server_generation") != generation) resnapshot = true
@@ -829,7 +884,7 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
                     while (active() && elapsed < delay) { Thread.sleep(200); elapsed += 200 }
                 }
             }
-        }.start()
+        }.apply { start() }
     }
 
     private fun apply(ev: JSONObject) {
@@ -841,65 +896,71 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
                 taskId = d.optString("task_id").takeIf { it.isNotEmpty() }
                 taskState = d.optString("state", taskState)
                 setRunning(taskState in setOf("queued", "running", "waiting_approval", "waiting_input", "cancelling", "recovering"))
+                if (!running) finishMsg()
                 updateTaskStatus()
             }
             "user" -> { closeBlocks(); if (pendingEcho != null && pendingEcho == d.optString("text")) pendingEcho = null else userBubble((if (d.optString("from") == "desktop") "🖥 " else "") + d.optString("text"), d.optInt("images")) }
-            "msg" -> { curThought = null; hideTyping()
-                if (curMsg == null) { curMsgSb = StringBuilder(); shown = 0; curMsg = MdView(this).apply { background = UI.card(context, 20); setPadding(dp(16), dp(12), dp(16), dp(12)); UI.lift(this) }
-                    list.addView(curMsg, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(8) }) }
+            "msg" -> { curThought = null
+                if (curMsg == null) {
+                    val label = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(20), 0, dp(4)) }
+                    label.addView(ImageView(this).apply { setImageResource(R.mipmap.ic_launcher); importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }, LinearLayout.LayoutParams(dp(22), dp(22)).apply { rightMargin = dp(8) })
+                    label.addView(UI.text(this, agentName(curAgent()), 13f, R.color.text, true)); list.addView(label)
+                    curMsgSb = StringBuilder(); curMsg = MdView(this).apply { setPadding(0, dp(4), 0, dp(12)) }
+                    list.addView(curMsg, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)) }
                 curMsgSb.append(d.optString("text"))
-                if (live) { if (!twOn) { twOn = true; h.post(tw) } } else renderPending = true }
-            "thought" -> { if (CxPrefs.think(this)) hideTyping(); if (curThought == null) { curThoughtSb = StringBuilder(); curThought = UI.text(this, "", 13.5f, R.color.muted).apply {
+                renderPending = true }
+            "thought" -> { if (curThought == null) { curThoughtSb = StringBuilder(); curThought = UI.text(this, "", 13.5f, R.color.muted).apply {
                     setPadding(dp(12), dp(6), dp(8), dp(6)); background = UI.round(context, col(R.color.bg), 10); visibility = if (CxPrefs.think(context)) View.VISIBLE else View.GONE }
                     thoughts.add(curThought!!); list.addView(curThought, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(6) }) }
-                curThoughtSb.append(d.optString("text")); curThought!!.text = "💭 " + curThoughtSb }
-            "tool" -> { hideTyping(); finishMsg(); curMsg = null; curThought = null; toolCard(d) }
+                curThoughtSb.append(d.optString("text")); curThought!!.text = "思考：" + curThoughtSb }
+            "tool" -> { finishMsg(); curMsg = null; curThought = null; toolCard(d) }
             "plan" -> { closeBlocks(); val a = d.optJSONArray("entries") ?: JSONArray()
-                val sb = StringBuilder("📋 计划\n"); for (i in 0 until a.length()) a.getJSONObject(i).let { sb.append(when (it.optString("status")) { "completed" -> "✓ "; "in_progress" -> "▶ "; else -> "○ " }).append(it.optString("content")).append('\n') }
+                val sb = StringBuilder("执行计划\n"); for (i in 0 until a.length()) a.getJSONObject(i).let { sb.append(when (it.optString("status")) { "completed" -> "✓ "; "in_progress" -> "▶ "; else -> "○ " }).append(it.optString("content")).append('\n') }
                 list.addView(UI.text(this, sb.trim(), 14f, R.color.text).apply { setPadding(dp(12), dp(8), dp(12), dp(8)); background = UI.round(context, col(R.color.bg), 10) }, UI.lp(this, 0, 6, 0, 0)) }
-            "ask" -> { closeBlocks(); hideTyping(); askCard(d); if (live) scrollEnd(true) }
+            "ask" -> { closeBlocks(); askCard(d); if (live) scrollEnd(true) }
             "ask_done" -> askDone(d)
-            "perm" -> { perms[d.optString("rid")] = d; sys("⚠️ 请求审批：" + d.optString("title")) }
-            "perm_done" -> { perms.remove(d.optString("rid")); sys("审批：" + d.optString("name")) }
-            "turn" -> { if (d.optString("state") == "running") { setRunning(true); if (live && curMsg == null) showTyping() } else { hideTyping(); closeBlocks(); setRunning(false)
+            "perm" -> { if (d.optString("rid") !in responseInFlight) perms[d.optString("rid")] = d; sys("请求审批：" + d.optString("title")) }
+            "perm_done" -> { perms.remove(d.optString("rid")); responseInFlight.remove(d.optString("rid")); sys("审批：" + d.optString("name")) }
+            "turn" -> { if (d.optString("state") == "running") { setRunning(true) } else { closeBlocks(); setRunning(false)
                 for ((_, p) in tools.toList()) if (p.second.optString("status").let { it != "completed" && it != "failed" }) { p.second.put("status", "stopped"); toolCard(p.second) }
                 when (d.optString("stopReason")) { "cancelled" -> sys("已停止"); "error" -> {}; else -> {} } } }
             "title" -> { session?.put("title", d.optString("title")); updateTitle() }
-            "error" -> hideTyping().let { sys("❌ " + d.optString("msg"), R.color.strong) }
+            "error" -> sys("出错：" + d.optString("msg"), R.color.strong)
             "deferred" -> sys(if (d.optString("state") == "blocked") "后续回答尚未发送：原任务未正常完成，请核对后重新提交。" else "回答已保存，等待当前任务结束后发送。")
         }
     }
-    private fun finishMsg() { val m = curMsg ?: return; h.removeCallbacks(tw); twOn = false; shown = curMsgSb.length; m.setMd(curMsgSb.toString()) }
+    private fun finishMsg() { curMsg?.setMd(curMsgSb.toString()) }
     private fun closeBlocks() { finishMsg(); curMsg = null; curThought = null }
     private var renderScheduled = false
     private fun scheduleRender() {
-        if (!renderPending) { showNextPerm(); if (!twOn) stick(); return }
+        if (!renderPending) { showNextPerm(); stick(); return }
         if (!renderScheduled) {
             renderScheduled = true
-            h.postDelayed({ renderScheduled = false; renderR.run() }, 60)
+            h.postDelayed(renderR, 32)
         }
     }
-    private val renderR = Runnable { renderNow(); scrollEnd(false) }
+    private val renderR = Runnable { renderScheduled = false; renderNow(); stick() }
     private fun renderNow() { renderPending = false; finishMsg(); showNextPerm() }
-    private fun scrollEnd(force: Boolean) { if (force) atBottom = true; if (atBottom) scroll.post { scroll.smoothScrollTo(0, maxOf(0, list.height - scroll.height)) } }
+    private fun scrollEnd(force: Boolean) { if (force) atBottom = true; if (atBottom) scroll.post { scroll.smoothScrollTo(0, maxOf(0, conversation.height - scroll.height)) } }
     private fun sys(s: String, color: Int = R.color.muted) {
         closeBlocks(); list.addView(UI.text(this, s, 13f, color).apply { gravity = Gravity.CENTER; setPadding(0, dp(6), 0, dp(6)) })
     }
     private fun userBubble(t: String, imgs: Int) {
-        val tv = UI.text(this, Md.linkify(this, SpannableStringBuilder((if (imgs > 0) "🖼 ×$imgs\n" else "") + t), color = 0xFFFFFFFF.toInt()), 16f, android.R.color.white).apply { setTextIsSelectable(true); Md.touch(this); highlightColor = 0x55FFFFFF
-            background = UI.grad(context, 18); setPadding(dp(14), dp(10), dp(14), dp(10)); maxWidth = (resources.displayMetrics.widthPixels * 0.8).toInt() }
+        val tv = UI.text(this, Md.linkify(this, SpannableStringBuilder((if (imgs > 0) "🖼 ×$imgs\n" else "") + t), color = col(R.color.primary)), 16f, R.color.text).apply { setTextIsSelectable(true); Md.touch(this); highlightColor = col(R.color.primaryC)
+            background = UI.round(context, col(R.color.userBg), 16); setPadding(dp(15), dp(12), dp(15), dp(12)); maxWidth = (resources.displayMetrics.widthPixels * 0.85).toInt() }
         val row = LinearLayout(this).apply { gravity = Gravity.END; addView(tv) }
         list.addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(14) })
     }
     private fun toolCard(d: JSONObject) {
         val id = d.optString("id"); val ex = tools[id]
-        val card = ex?.first ?: LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = UI.card(context) }.also {
+        val card = ex?.first ?: LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = UI.round(context, col(R.color.surface2), 12) }.also {
             list.addView(it, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(6) }) }
         val open = card.tag == true
         tools[id] = Pair(card, d); card.removeAllViews()
         val st = d.optString("status"); val icon = when { st == "stopped" -> "■"; st == "failed" || (d.has("exit") && d.optInt("exit") != 0) -> "✗"; st == "completed" -> "✓"; else -> "⟳" }
         val kind = when (d.optString("kind")) { "read" -> "读取"; "edit" -> "编辑"; "execute" -> "运行"; "search" -> "搜索"; "fetch" -> "联网"; "delete" -> "删除"; "move" -> "移动"; else -> "工具" }
-        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(8))
+        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(48)
+            isFocusable = true; isFocusableInTouchMode = false; foreground = UI.focusForeground(context, DS.R_SM); contentDescription = "展开或收起工具详情"; setPadding(dp(12), dp(8), dp(12), dp(8))
             setOnClickListener { card.tag = !(card.tag == true); val cur = tools[id]!!.second; toolCard(cur)
                 if (card.tag == true && cur.optBoolean("more") && cur.has("_fs")) { val s0 = sid; bg { val r = Cx.req(this@CodexPane, "GET", "/sessions/$s0/tool/${cur.optInt("_fs")}")
                     if (r.first == 200) runOnUiThread { if (s0 == sid && tools[id]?.first === card) { val full = JSONObject(r.second); if (full.length() > 0) toolCard(full) } } } } } }
@@ -910,8 +971,8 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
         val fl = LinkedHashSet<String>(); d.optJSONArray("diffs")?.let { a -> for (i in 0 until a.length()) a.getJSONObject(i).optString("path").let { if (it.isNotBlank()) fl.add(it) } }
         d.optJSONArray("files")?.let { a -> for (i in 0 until a.length()) a.optString(i).let { if (it.isNotBlank()) fl.add(it) } }
         if (fl.isNotEmpty()) card.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; setPadding(dp(30), 0, dp(12), dp(8))
-            addView(LinearLayout(context).apply { for (f in fl.take(12)) addView(UI.text(context, "📄 " + f.substringAfterLast('/'), 12.5f, R.color.primary).apply {
-                setPadding(dp(10), dp(4), dp(10), dp(4)); background = UI.round(context, col(R.color.primaryC), 12); setOnClickListener { openLink(f) } }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { rightMargin = dp(6) }) }) })
+            addView(LinearLayout(context).apply { for (f in fl.take(12)) addView(UI.text(context, f.substringAfterLast('/'), 12.5f, R.color.primary).apply {
+                minimumHeight = dp(48); gravity = Gravity.CENTER_VERTICAL; isFocusable = true; isFocusableInTouchMode = false; foreground = UI.focusForeground(context, DS.R_SM); setPadding(dp(10), dp(4), dp(10), dp(4)); background = UI.round(context, col(R.color.primaryC), 12); setOnClickListener { openLink(f) } }, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { rightMargin = dp(6) }) }) })
         if (open) {
             val sb = SpannableStringBuilder()
             if (d.has("cmd")) sb.append("$ ").append(d.optString("cmd")).append("\n\n") else if (d.optString("title").contains("\n")) sb.append(d.optString("title")).append("\n\n")
@@ -941,7 +1002,7 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
         val card = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(12), dp(14), dp(12)); background = UI.round(context, col(R.color.primaryC), 14) }
         askCards[rid] = card
         list.addView(card, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(10) })
-        card.addView(UI.text(this, "❓ " + d.optString("title", "需要你的输入"), 13f, R.color.primary, true))
+        card.addView(UI.text(this, d.optString("title", "需要你的输入"), 13f, R.color.primary, true))
         if (d.optString("text").isNotEmpty()) card.addView(UI.text(this, d.optString("text"), 13.5f, R.color.text).apply { setTextIsSelectable(true); setPadding(0, dp(6), 0, 0) })
         val qs = d.optJSONArray("questions") ?: JSONArray()
         val sel = HashMap<String, MutableList<String>>(); val texts = HashMap<String, EditText>()
@@ -957,7 +1018,7 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
                     val l = sel[qid]!!
                     if (multi) { if (l.contains(label)) l.remove(label) else l.add(label) } else { l.clear(); l.add(label) }
                     for ((k, bb) in btns.withIndex()) { val on = l.contains(opts.getJSONObject(k).optString("label"))
-                        bb.background = UI.round(this, col(if (on) R.color.primary else R.color.surface), 10); bb.setTextColor(if (on) 0xFFFFFFFF.toInt() else col(R.color.text)) }
+                        bb.background = UI.round(this, col(if (on) R.color.primaryFill else R.color.surface), 10); bb.setTextColor(if (on) 0xFFFFFFFF.toInt() else col(R.color.text)) }
                 }
                 btns.add(b); card.addView(b, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(6) })
             }
@@ -1017,36 +1078,79 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
     }
 
     // ───────── 审批 ─────────
-    private fun showNextPerm() {
-        if (!paneVisible) return
-        if (permShown != null && perms.containsKey(permShown)) return
-        val (rid, d) = perms.entries.firstOrNull()?.toPair() ?: return
-        permShown = rid
-        val dlg = BottomSheetDialog(this)
-        permDialog = dlg
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(18), dp(20), dp(24)); setBackgroundColor(col(R.color.surface)) }
-        box.addView(UI.text(this, "Codex 请求执行", 13f, R.color.muted))
-        box.addView(UI.text(this, d.optString("title"), 17f, R.color.text, true).apply { setPadding(0, dp(4), 0, dp(8)) })
-        if (d.optString("detail").isNotEmpty()) box.addView(ScrollView(this).apply { addView(UI.text(context, d.optString("detail"), 12.5f).apply { typeface = Typeface.MONOSPACE
-            background = UI.round(context, col(R.color.bg), 10); setPadding(dp(10), dp(8), dp(10), dp(8)) }) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = dp(12) })
-        val opts = d.optJSONArray("options") ?: JSONArray()
-        val order = listOf("allow_once", "allow_always", "reject_once", "reject_always")
-        val sorted = (0 until opts.length()).map { opts.getJSONObject(it) }.sortedBy { order.indexOf(it.optString("kind")).let { i -> if (i < 0) 9 else i } }
-        for (o in sorted) {
-            val k = o.optString("kind"); val label = when (k) { "allow_once" -> "允许一次"; "allow_always" -> "始终允许"; "reject_once" -> "拒绝"; "reject_always" -> "始终拒绝"; else -> o.optString("name") }
-            box.addView(UI.filledButton(this, label, if (k.startsWith("allow")) (if (k == "allow_once") R.color.primary else R.color.surface2) else R.color.surface2,
-                if (k == "allow_once") android.R.color.white else if (k.startsWith("reject")) R.color.strong else R.color.text) {
-                answer(rid, o.optString("id")); dlg.dismiss() }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(8) })
-        }
-        dlg.setContentView(box); dlg.setOnDismissListener {
-            if (permShown == rid) permShown = null
-            if (permDialog === dlg) permDialog = null
-        }
-        dlg.setCancelable(true); dlg.show()
+    private fun clearApproval() {
+        permDialog?.dismiss(); permDialog = null; permShown = null
+        if (::approvalHost.isInitialized) { approvalHost.removeAllViews(); approvalHost.visibility = View.GONE }
     }
-    private fun answer(rid: String, opt: String) { perms.remove(rid); permShown = null
+    private fun showNextPerm() {
+        if (permShown != null && !perms.containsKey(permShown)) clearApproval()
+        if (perms.isEmpty()) { clearApproval(); return }
+        if (!paneVisible || permShown != null) return
+        val (rid, d) = perms.entries.first().toPair()
+        val current = sid; val connection = Cx.connection(this)
+        permShown = rid
+        approvalHost.removeAllViews(); approvalHost.visibility = View.VISIBLE
+        approvalHost.setBackgroundColor(col(R.color.approvalBg))
+        approvalHost.setPadding(dp(20), dp(14), dp(20), dp(16))
+        approvalHost.addView(UI.text(this, "等待你的批准" + if (perms.size > 1) "（${perms.size} 项）" else "", 13f, R.color.primary, true).apply {
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        })
+        approvalHost.addView(UI.text(this, d.optString("title"), 17f, R.color.text, true).apply {
+            maxLines = 2; ellipsize = TextUtils.TruncateAt.END; setPadding(0, dp(4), 0, 0)
+        })
+        if (d.optString("detail").isNotBlank()) approvalHost.addView(UI.text(this, d.optString("detail"), 14f, R.color.text).apply {
+            typeface = Typeface.MONOSPACE; maxLines = 2; ellipsize = TextUtils.TruncateAt.END
+            setPadding(0, dp(4), 0, dp(2))
+        }, UI.lp(this, 0, 8, 0, 0))
+        val pid = session?.optInt("project_id") ?: CxPrefs.project(this)
+        approvalHost.addView(UI.text(this, "项目：${projName(pid)}", 12f, R.color.muted).apply {
+            maxLines = 1; ellipsize = TextUtils.TruncateAt.MIDDLE; setPadding(0, dp(2), 0, 0)
+        })
+        val opts = d.optJSONArray("options") ?: JSONArray()
+        val order = listOf("allow_once", "reject_once", "allow_always", "reject_always")
+        val sorted = (0 until opts.length()).map { opts.getJSONObject(it) }.sortedBy { order.indexOf(it.optString("kind")).let { i -> if (i < 0) 9 else i } }
+        fun label(o: JSONObject) = when (o.optString("kind")) {
+            "allow_once" -> "允许一次"; "allow_always" -> "始终允许"; "reject_once" -> "拒绝"; "reject_always" -> "始终拒绝"; else -> o.optString("name", "选择")
+        }
+        fun respond(o: JSONObject) {
+            fun stillCurrent() = sid == current && connection.isCurrent(this) && perms.containsKey(rid) && permShown == rid
+            if (!stillCurrent()) return
+            if (o.optString("kind").startsWith("reject")) {
+                AlertDialog.Builder(this).setTitle("拒绝本次操作？")
+                    .setMessage("这条请求不会执行。Agent 已产生的文件改动仍然保留。")
+                    .setNegativeButton("返回审批", null)
+                    .setPositiveButton("确认拒绝") { _, _ -> if (stillCurrent()) answer(rid, o.optString("id")) }.show()
+            } else answer(rid, o.optString("id"))
+        }
+        // Full request and every provider option remain available without covering the conversation automatically.
+        approvalHost.addView(UI.filledButton(this, "查看完整请求", R.color.approvalBg, R.color.primary) {
+            if (sid != current || !perms.containsKey(rid)) return@filledButton
+            val dlg = BottomSheetDialog(this); permDialog = dlg
+            val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(20), dp(20), dp(24)); setBackgroundColor(col(R.color.surface)) }
+            box.addView(UI.text(this, "${agentName(curAgent())} 请求执行", 17f, R.color.text, true))
+            val detail = UI.text(this, d.optString("title") + "\n\n" + d.optString("detail"), 14f).apply { setTextIsSelectable(true); typeface = Typeface.MONOSPACE; setPadding(0, dp(12), 0, dp(12)) }
+            box.addView(ScrollView(this).apply { addView(detail) }, LinearLayout.LayoutParams(MATCH_PARENT, minOf(dp(200), resources.displayMetrics.heightPixels / 4)))
+            val options = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            for (o in sorted) options.addView(UI.filledButton(this, label(o), if (o.optString("kind") == "allow_once") R.color.primary else R.color.surface2,
+                if (o.optString("kind") == "allow_once") android.R.color.white else R.color.text) { respond(o); dlg.dismiss() }, UI.lp(this, 0, 8, 0, 0))
+            box.addView(ScrollView(this).apply { addView(options) }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            dlg.setContentView(box); dlg.setOnDismissListener { if (permDialog === dlg) permDialog = null }; dlg.show()
+        }.apply { textSize = 13f; gravity = Gravity.START or Gravity.CENTER_VERTICAL })
+        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val quick = listOf("reject_once", "allow_once").mapNotNull { kind -> sorted.firstOrNull { it.optString("kind") == kind } }.ifEmpty { sorted.take(2) }
+        for ((i, o) in quick.withIndex()) {
+            val primary = o.optString("kind") == "allow_once"
+            val button = if (primary) UI.filledButton(this, label(o)) { respond(o) } else UI.secondaryButton(this, label(o)) { respond(o) }
+            button.textSize = 16f
+            actions.addView(button, LinearLayout.LayoutParams(0, WRAP_CONTENT, if (primary) 1.6f else 1f).apply { if (i > 0) leftMargin = dp(10) })
+        }
+        approvalHost.addView(actions)
+        updateTaskStatus()
+    }
+    private fun answer(rid: String, opt: String) { perms.remove(rid); clearApproval(); showNextPerm()
         val current = sid ?: return
         responseInFlight.add(rid)
+        updateTaskStatus()
         bg {
             val r = AgentRepository.command(this, current, "interaction", "/interactions/$rid/respond", JSONObject().put("option", opt))
             runOnUiThread {
@@ -1069,7 +1173,7 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
         val body = JSONObject().put("text", t)
         if (images.isNotEmpty()) body.put("images", JSONArray().apply { images.forEach { put(JSONObject().put("mime", it.first).put("data", it.second)) } })
         if (sid == null) list.removeAllViews()
-        closeBlocks(); userBubble(t, images.size); pendingEcho = t; showTyping(); scrollEnd(true)
+        closeBlocks(); userBubble(t, images.size); pendingEcho = t; taskId = null; taskState = "submitting"; updateTaskStatus(); scrollEnd(true)
         input.setText(""); images.clear(); thumbs.removeAllViews(); thumbs.visibility = View.GONE; setRunning(true)
         (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(input.windowToken, 0)
         val pid = CxPrefs.project(this)
@@ -1081,29 +1185,30 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
             var s = submittedSid
             if (s == null) {
                 val r = Cx.req(this, "POST", "/sessions", creation, connection = conn)
-                if (r.first != 200) { runOnUiThread { if (!conn.isCurrent(this) || sid != submittedSid) return@runOnUiThread; setRunning(false); hideTyping(); pendingEcho = null; input.setText(t); toast("创建对话失败：" + Cx.err(r)) }; return@bg }
+                if (r.first != 200) { runOnUiThread { if (!conn.isCurrent(this) || sid != submittedSid) return@runOnUiThread; setRunning(false); taskState = "idle"; updateTaskStatus(); pendingEcho = null; input.setText(t); toast("创建对话失败：" + Cx.err(r)) }; return@bg }
                 val o = JSONObject(r.second); s = o.getString("id")
-                runOnUiThread { if (!conn.isCurrent(this) || sid != submittedSid) return@runOnUiThread; sid = s; session = o; CxPrefs.setSession(this, s); visibleSession = if (paneVisible) s else null; updateTitle(); startStream() }
+                runOnUiThread { if (!conn.isCurrent(this) || sid != submittedSid) return@runOnUiThread; sid = s; session = o; CxPrefs.setSession(this, s); visibleSession = if (paneVisible) s else null; updateTitle(); startStream(refresh = false) }
             }
             val r = AgentRepository.command(this, s!!, "prompt", "/sessions/$s/tasks", body, expectedConnection = conn)
             runOnUiThread {
                 if (!conn.isCurrent(this) || sid != s) return@runOnUiThread
                 if (!r.accepted) {
-                    hideTyping(); pendingEcho = null
                     if (r.unknown) {
                         deliveryUnknown = true
                         setConnection("提交结果暂未确认，正在查询原操作回执")
                     } else {
-                        setRunning(false)
+                        pendingEcho = null; setRunning(false); taskState = "failed"
                         if (input.text.isEmpty()) input.setText(t)
                         if (images.isEmpty()) images.addAll(submittedImages)
                     }
                     toast(r.message)
                 } else {
-                    taskId = r.body.optString("task_id").takeIf { it.isNotEmpty() }
-                    taskState = "queued"; scrollEnd(true); buildDrawer()
+                    val acceptedId = r.body.optString("task_id").takeIf { it.isNotEmpty() }
+                    // SSE may already have delivered running or a terminal state before this receipt.
+                    if (taskId != acceptedId) { taskId = acceptedId; taskState = "queued"; setRunning(true) }
+                    scrollEnd(true); buildDrawer()
                 }
-                updateTaskStatus(); startStream()
+                updateTaskStatus(); startStream(refresh = r.unknown)
             }
         }
     }
@@ -1183,37 +1288,72 @@ class CodexPane(val act: AppCompatActivity) : android.content.ContextWrapper(act
     // ───────── Diff ─────────
     private fun showDiff() {
         val s = sid ?: run { toast("先开始一个对话"); return }
-        val dlg = Dialog(this, android.R.style.Theme_DeviceDefault_DayNight)
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(col(R.color.surface)) }
-        val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(4), dp(6), dp(12), dp(6)) }
-        bar.addView(iconBtn("✕") { dlg.dismiss() })
-        val tt = UI.text(this, "改动 (git diff)", 17f, R.color.text, true); bar.addView(tt, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-        box.addView(bar)
-        val body = UI.text(this, "加载中…", 12f).apply { typeface = Typeface.MONOSPACE; setTextIsSelectable(true); setPadding(dp(12), dp(8), dp(12), dp(40)) }
-        box.addView(ScrollView(this).apply { addView(HorizontalScrollView(context).apply { addView(body) }) }, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
-        dlg.setContentView(box); dlg.show()
-        bg {
-            val r = Cx.req(this, "GET", "/sessions/$s/diff", readTimeout = 30000)
-            runOnUiThread {
-                if (r.first != 200) { body.text = Cx.err(r); return@runOnUiThread }
-                val o = JSONObject(r.second)
-                if (!o.optBoolean("git")) { body.text = "该项目不是 git 仓库，无法显示 diff。"; return@runOnUiThread }
-                tt.text = "改动 · " + o.optString("branch")
-                val diff = o.optString("diff"); if (diff.isBlank()) { body.text = "没有未提交的改动"; return@runOnUiThread }
-                val sb = SpannableStringBuilder(); sb.append(o.optString("stat")).append('\n')
-                val red = col(R.color.strong); val green = col(R.color.down); val blue = col(R.color.primary); val hb = col(R.color.surface2)
-                for (l in diff.lines().take(6000)) {
-                    val st = sb.length; sb.append(l).append('\n')
-                    when {
-                        l.startsWith("diff --git") -> { sb.setSpan(BackgroundColorSpan(hb), st, sb.length, 0); sb.setSpan(android.text.style.StyleSpan(Typeface.BOLD), st, sb.length, 0) }
-                        l.startsWith("+++") || l.startsWith("---") -> sb.setSpan(ForegroundColorSpan(col(R.color.muted)), st, sb.length, 0)
-                        l.startsWith("@@") -> sb.setSpan(ForegroundColorSpan(blue), st, sb.length, 0)
-                        l.startsWith("+") -> sb.setSpan(ForegroundColorSpan(green), st, sb.length, 0)
-                        l.startsWith("-") -> sb.setSpan(ForegroundColorSpan(red), st, sb.length, 0)
+        val dlg = Dialog(this, R.style.AppTheme)
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(col(R.color.bg)) }
+        val bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(4), dp(6), dp(16), dp(6)) }
+        bar.addView(iconBtn("✕") { dlg.dismiss() }.apply { contentDescription = "关闭文件改动" })
+        val heading = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        heading.addView(UI.text(this, "文件改动", 17f, R.color.text, true))
+        val sub = UI.text(this, projName(session?.optInt("project_id") ?: CxPrefs.project(this)), 12f, R.color.muted)
+        heading.addView(sub); bar.addView(heading, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)); box.addView(bar)
+        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(16), dp(20), dp(32)) }
+        box.addView(ScrollView(this).apply { addView(content); isFillViewport = true }, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
+        dlg.setContentView(box); dlg.show(); dlg.window?.setLayout(MATCH_PARENT, MATCH_PARENT)
+        fun load() {
+            content.removeAllViews(); content.addView(UI.text(this, "正在读取项目改动…", 16f, R.color.muted))
+            bg {
+                val r = Cx.req(this, "GET", "/sessions/$s/diff", readTimeout = 30000)
+                runOnUiThread {
+                    if (!dlg.isShowing) return@runOnUiThread
+                    content.removeAllViews()
+                    if (r.first != 200) {
+                        content.addView(UI.text(this, Cx.err(r), 16f))
+                        content.addView(UI.secondaryButton(this, "重试") { load() }, UI.lp(this, 0, 16, 0, 0)); return@runOnUiThread
                     }
+                    val o = runCatching { JSONObject(r.second) }.getOrNull()
+                    if (o == null) { content.addView(UI.text(this, "无法读取改动，请关闭后重试", 16f)); return@runOnUiThread }
+                    if (!o.optBoolean("git")) { content.addView(UI.text(this, "该项目不是 Git 仓库，无法显示文件改动。", 16f, R.color.muted)); return@runOnUiThread }
+                    sub.text = listOf(projName(session?.optInt("project_id") ?: CxPrefs.project(this)), o.optString("branch")).filter { it.isNotBlank() }.joinToString(" / ")
+                    val diff = o.optString("diff")
+                    if (diff.isBlank()) { content.addView(UI.text(this, "没有未提交的改动", 20f, R.color.text, true)); return@runOnUiThread }
+                    val allLines = diff.lines(); val limited = allLines.take(6000).joinToString("\n")
+                    val chunks = limited.split(Regex("(?m)(?=^diff --git )")).filter { it.isNotBlank() }
+                    content.addView(UI.text(this, "项目文件改动", 28f, R.color.text, true))
+                    content.addView(UI.text(this, "以下是项目当前未提交的改动。查看后可返回对话继续处理。", 14f, R.color.muted).apply { setPadding(0, dp(8), 0, dp(16)) })
+                    if (o.optString("stat").isNotBlank()) content.addView(UI.text(this, o.optString("stat").trim(), 13f, R.color.muted).apply { typeface = Typeface.MONOSPACE; setPadding(0, 0, 0, dp(12)) })
+                    for (chunk in chunks) {
+                        val lines = chunk.lines()
+                        val name = lines.firstOrNull { it.startsWith("+++ b/") }?.removePrefix("+++ b/")
+                            ?: lines.firstOrNull { it.startsWith("--- a/") }?.removePrefix("--- a/") ?: lines.first()
+                        val adds = lines.count { it.startsWith("+") && !it.startsWith("+++") }
+                        val deletes = lines.count { it.startsWith("-") && !it.startsWith("---") }
+                        val block = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(60)
+                            isFocusable = true; isFocusableInTouchMode = false; foreground = UI.focusForeground(context, DS.R_SM); contentDescription = "展开或收起文件改动，$name" }
+                        row.addView(UI.text(this, name, 16f, R.color.text, true).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.MIDDLE }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                        row.addView(UI.text(this, "+$adds −$deletes", 13f, R.color.down).apply { setPadding(dp(12), 0, 0, 0) })
+                        val body = UI.text(this, "", 14f).apply { typeface = Typeface.MONOSPACE; setTextIsSelectable(true); setPadding(dp(12), dp(12), dp(12), dp(16)) }
+                        val spans = SpannableStringBuilder()
+                        for (line in lines.drop(1)) {
+                            val from = spans.length; spans.append(line).append('\n')
+                            val color = when {
+                                line.startsWith("+++") || line.startsWith("---") -> R.color.muted
+                                line.startsWith("@@") -> R.color.primary
+                                line.startsWith("+") -> R.color.down
+                                line.startsWith("-") -> R.color.strong
+                                else -> R.color.text
+                            }
+                            spans.setSpan(ForegroundColorSpan(col(color)), from, spans.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        }
+                        body.text = spans
+                        val code = HorizontalScrollView(this).apply { setBackgroundColor(col(R.color.surface2)); addView(body) }
+                        row.setOnClickListener { code.visibility = if (code.visibility == View.VISIBLE) View.GONE else View.VISIBLE }
+                        block.addView(row); block.addView(code); content.addView(block, UI.lp(this, 0, 8, 0, 12))
+                    }
+                    if (allLines.size > 6000) content.addView(UI.text(this, "改动较多，此处展示前 6000 行；完整内容请在电脑查看。", 14f, R.color.muted))
                 }
-                body.text = sb
             }
         }
+        load()
     }
 }

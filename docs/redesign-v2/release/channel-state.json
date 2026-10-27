@@ -1,0 +1,10 @@
+{
+  "versionName": "0.1.7",
+  "versionCode": 8,
+  "apkSha256": "f32cfec8c5f7dad883d12ed4c77e149992f869a0a00e9fe20ccaf494e7b531af",
+  "candidatePublished": true,
+  "publicationEvidence": "publication.json",
+  "previousVersionName": "0.1.6",
+  "previousVersionCode": 7,
+  "backupPath": "$HOME/.local/share/leoagent/backups/android-0.1.6-to-0.1.7-20261026T082452651850Z"
+}

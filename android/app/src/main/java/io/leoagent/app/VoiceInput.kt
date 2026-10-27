@@ -29,7 +29,7 @@ import java.nio.ByteOrder
 import kotlin.math.sqrt
 
 /** 微信式语音输入：⌨/🎤 切换 + 「按住 说话」，上滑取消，松开转文字（Mac 本地 SenseVoice, POST /api/stt） */
-class VoiceInput(private val act: AppCompatActivity, private val input: EditText, comp: LinearLayout, private val onSend: () -> Unit) {
+class VoiceInput(private val act: AppCompatActivity, private val input: EditText, comp: LinearLayout, controls: LinearLayout = comp, private val onSend: () -> Unit) {
     private val c = act
     private fun dp(v: Int) = UI.dp(c, v)
     private fun col(id: Int) = UI.col(c, id)
@@ -48,14 +48,17 @@ class VoiceInput(private val act: AppCompatActivity, private val input: EditText
     private var overlay: View? = null; private var tip: TextView? = null; private var timer: TextView? = null; private var wave: Wave? = null; private var bubble: LinearLayout? = null
 
     init {
-        toggle = TextView(c).apply { gravity = Gravity.CENTER; UI.glyph(c, this, R.drawable.vi_mic, col(R.color.text), UI.card(c, 20))
+        toggle = TextView(c).apply { gravity = Gravity.CENTER; UI.glyph(c, this, R.drawable.vi_mic, col(R.color.text), UI.round(c, col(R.color.surface2), 12))
+            isFocusable = true; isFocusableInTouchMode = false; contentDescription = "切换语音输入"
+            foreground = UI.focusForeground(c, DS.R_SM)
             setOnClickListener { setVoice(!voice) }
             setOnLongClickListener { settings(); true } }
         val i = comp.indexOfChild(input)
-        comp.addView(toggle, i, LinearLayout.LayoutParams(dp(40), dp(40)).apply { setMargins(dp(8), 0, 0, 0) })
+        if (controls === comp) comp.addView(toggle, i, LinearLayout.LayoutParams(dp(48), dp(48)))
+        else controls.addView(toggle, LinearLayout.LayoutParams(dp(48), dp(48)))
         hold = TextView(c).apply { text = "按住 说话"; textSize = 16f; typeface = UI.BOLD; gravity = Gravity.CENTER; setTextColor(col(R.color.text))
-            background = UI.card(c, 22); visibility = View.GONE; setOnTouchListener(::touch) }
-        comp.addView(hold, i + 2, LinearLayout.LayoutParams(0, dp(40), 1f).apply { setMargins(dp(8), 0, dp(8), 0) })
+            background = UI.round(c, col(R.color.surface2), 12); visibility = View.GONE; contentDescription = "按住说话，松开结束，上滑取消"; setOnTouchListener(::touch) }
+        comp.addView(hold, if (controls === comp) i + 2 else i + 1, LinearLayout.LayoutParams(0, dp(48), 1f).apply { setMargins(dp(4), 0, dp(4), 0) })
     }
     private fun autoSend() = sp.getBoolean("voice_autosend", false)
     private fun settings() {
@@ -63,7 +66,7 @@ class VoiceInput(private val act: AppCompatActivity, private val input: EditText
         AlertDialog.Builder(c).setTitle("语音输入").setView(sw).setPositiveButton("好") { _, _ -> sp.edit().putBoolean("voice_autosend", sw.isChecked).apply() }.show()
     }
     private fun setVoice(v: Boolean) {
-        voice = v; UI.glyph(c, toggle, if (v) R.drawable.vi_keyboard else R.drawable.vi_mic, col(R.color.text), UI.card(c, 20))
+        voice = v; toggle.contentDescription = if (v) "切换文字输入" else "切换语音输入"; UI.glyph(c, toggle, if (v) R.drawable.vi_keyboard else R.drawable.vi_mic, col(R.color.text), UI.round(c, col(R.color.surface2), 12))
         input.visibility = if (v) View.GONE else View.VISIBLE; hold.visibility = if (v) View.VISIBLE else View.GONE
         val imm = c.getSystemService(InputMethodManager::class.java)
         if (v) imm.hideSoftInputFromWindow(input.windowToken, 0) else { input.requestFocus(); imm.showSoftInput(input, 0) }
@@ -112,7 +115,7 @@ class VoiceInput(private val act: AppCompatActivity, private val input: EditText
         wave?.push(level); if (s >= MAX_S) finish(true) else h.postDelayed(this, 50) } }
     private fun finish(ok: Boolean) {
         val r = rec ?: return; rec = null; try { r.stop() } catch (_: Exception) {}; r.release()
-        hideOverlay(); hold.text = "按住 说话"; hold.background = UI.card(c, 22); hold.setTextColor(col(R.color.text))
+        hideOverlay(); hold.text = "按住 说话"; hold.background = UI.round(c, col(R.color.surface2), 12); hold.setTextColor(col(R.color.text))
         val ms = System.currentTimeMillis() - t0
         if (!ok) return
         if (ms < 700) { Toast.makeText(c, "说话时间太短", Toast.LENGTH_SHORT).show(); return }
@@ -157,7 +160,7 @@ class VoiceInput(private val act: AppCompatActivity, private val input: EditText
         root.addView(fl, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT); overlay = fl
     }
     private fun styleCancel() {
-        bubble?.background = if (cancel) UI.round(c, col(R.color.strong), DS.R_LG) else UI.grad(c, DS.R_LG)
+        bubble?.background = if (cancel) UI.round(c, col(R.color.strongFill), DS.R_LG) else UI.grad(c, DS.R_LG)
         tip?.text = if (cancel) "松开手指，取消发送" else "松开 发送 · 上滑 取消"; tip?.setTextColor(if (cancel) col(R.color.strong) else Color.WHITE)
         hold.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
     }

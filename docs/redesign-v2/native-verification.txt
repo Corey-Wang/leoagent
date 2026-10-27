@@ -1,0 +1,10 @@
+PASS: toolbar-touch-reproduce touchscreen first tap and keyboard behavior
+PASS: toolbar-touch touchscreen first tap and keyboard behavior
+PASS: readable Markdown tables and code in light/dark themes; rendered PNGs saved in cache
+PASS: old credential migration and legacy QR settings/save retain encrypted credentials
+PASS: legacy upgrade compatibility
+PAIRING_PENDING 144746
+PASS: real Android Keystore, encrypted credential storage, local pairing and HTTP task submission
+PASS: Android Keystore round-trip, tamper rejection and saved credentials after process recreation
+PASS: redesign-light real native send, allow/reject, stale approval cleanup, 320dp row, contrast and screenshots
+PASS: redesign-dark real native send, allow/reject, stale approval cleanup, 320dp row, contrast and screenshots

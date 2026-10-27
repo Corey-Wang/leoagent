@@ -6,7 +6,7 @@ use crate::db::{home, now, Db};
 use crate::desk::{self, Desk, FirstTurn};
 use crate::events::Bus;
 use crate::py::{pystr, truthy};
-use crate::runtime::{log, AcpAgent, AgentLike, Rpc};
+use crate::runtime::{log, AcpAgent, AgentLike, Rpc, RpcError};
 use parking_lot::Mutex;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -273,8 +273,52 @@ pub fn apply_cfg(rpc: &Rpc, asid: &Option<String>, s: &Value) {
     }
     if let Err(e) = rpc.call("session/set_mode", json!({"sessionId": asid, "modeId": if s["mode"] == "ask" { "read-only" } else { "agent" }}), 30) { log(&format!("set_mode {e}")) }
 }
-pub fn get_agent(sid: &str) -> Result<Arc<dyn AgentLike>, String> {
+/// Restart only a timed-out initialization: no session or prompt has been sent yet.
+fn initialize_agent(sess: &Value, task: Option<&str>) -> Result<(Arc<AcpAgent>, String, Value), String> {
     let s = st();
+    let sid = sess["id"].as_str().ok_or("no session id")?;
+    for attempt in 1..=2 {
+        if let Some(task) = task {
+            let task = crate::tasks::get(&s.db, task).map_err(|e| e.message)?.ok_or("no task")?;
+            if task["cancel_requested"] == true || task["state"] != "running" {
+                log(&format!("acp initialize sid={sid} cancelled before attempt={attempt}"));
+                return Err("Agent 初始化已取消，未发送本轮消息".into());
+            }
+        }
+        let a = AcpAgent::spawn(sess)?;
+        let runtime_id = match crate::tasks::record_runtime(&s.db, sid, a.rpc.pid(), &s.generation) {
+            Ok(id) => id,
+            Err(e) => { a.rpc.kill(); return Err(e.message); }
+        };
+        let started = now();
+        match a.rpc.call_detailed("initialize", json!({"protocolVersion": 1, "clientCapabilities": {"fs": {"readTextFile": false, "writeTextFile": false}, "terminal": false}}), 60) {
+            Ok(ini) => {
+                log(&format!("acp initialize sid={sid} attempt={attempt}/2 pid={} seconds={:.3} ok", a.rpc.pid(), now() - started));
+                return Ok((a, runtime_id, ini));
+            }
+            Err(e) => {
+                log(&format!("acp initialize sid={sid} attempt={attempt}/2 pid={} seconds={:.3} error={e}", a.rpc.pid(), now() - started));
+                a.rpc.kill();
+                crate::tasks::runtime_exited(&s.db, &runtime_id).map_err(|e| e.message)?;
+                if matches!(e, RpcError::Timeout { .. }) && attempt == 1 && !crate::runtime::stopping() {
+                    // A fresh owned process is required. Never replay session/new,
+                    // session/load or session/prompt, whose effects may be unknown.
+                    continue;
+                }
+                return Err(format!("Agent 初始化失败（第 {attempt} 次尝试）：{e}。未发送本轮消息；请检查电脑端 Agent 状态后重试"));
+            }
+        }
+    }
+    unreachable!()
+}
+
+pub fn get_agent(sid: &str, task: Option<&str>) -> Result<Arc<dyn AgentLike>, String> {
+    let s = st();
+    // Submission may race the stream's asynchronous desktop attachment. Select
+    // the existing desktop owner before considering an ACP runtime.
+    if let Some(a) = desk_attach(sid, false) {
+        return Ok(a);
+    }
     let _g = s.alk.lock();
     if let Some(a) = s.agent(sid) {
         if a.alive() {
@@ -284,22 +328,17 @@ pub fn get_agent(sid: &str) -> Result<Arc<dyn AgentLike>, String> {
             }
             return Ok(a);
         }
+        if a.is_desk() {
+            return Err("与桌面端的连接已断开，未发送本轮消息；请重新打开原会话后重试".into());
+        }
     }
     let sess = crate::sess_row(sid).ok_or("no session")?;
-    let a = AcpAgent::spawn(&sess)?;
-    let runtime_id = match crate::tasks::record_runtime(&s.db, sid, a.rpc.pid(), &s.generation) {
-        Ok(id) => id,
-        Err(e) => {
-            a.rpc.kill();
-            return Err(e.message);
-        }
-    };
+    let (a, runtime_id, ini) = initialize_agent(&sess, task)?;
     let fail = |e: String| {
         a.rpc.kill();
         let _ = crate::tasks::runtime_exited(&s.db, &runtime_id);
         e
     };
-    let ini = a.rpc.call("initialize", json!({"protocolVersion": 1, "clientCapabilities": {"fs": {"readTextFile": false, "writeTextFile": false}, "terminal": false}}), 60).map_err(fail)?;
     if ini.get("protocolVersion").and_then(Value::as_i64) != Some(1) {
         return Err(fail("Agent 不支持当前 ACP 协议版本 1".into()));
     }
@@ -756,6 +795,9 @@ pub fn desk_attach(sid: &str, force: bool) -> Option<Arc<dyn AgentLike>> {
         if a.is_desk() && a.rpc().is_none() && a.alive() {
             return Some(a);
         }
+        if a.running() || !a.perm_ids().is_empty() {
+            return None;
+        }
         a.kill();
     }
     let d: Arc<dyn AgentLike> = Desk::new(sid, &tid);
@@ -862,39 +904,20 @@ fn run_task(task: &str, sid: &str, blocks: &[Value]) {
         if std::env::var("LEOAGENT_NO_PROMPT").is_ok() {
             return Err((false, "NO_PROMPT test mode".into()));
         }
-        let ag = get_agent(sid).map_err(|e| (false, e))?;
+        let ag = get_agent(sid, Some(task)).map_err(|e| (false, e))?;
         let cancelled = crate::tasks::get(&s.db, task)
             .map_err(|e| (false, e.message))?
             .is_some_and(|t| t["cancel_requested"] == true);
         if cancelled {
             return Ok("cancelled".into());
         }
-        // A desktop-owned handle cannot be silently retried through another backend.
-        let rpc = ag.rpc().ok_or_else(|| {
-            (
-                false,
-                "该会话正由实验桌面后端管理；请使用独立 ACP 会话执行持久任务".into(),
-            )
-        })?;
-        ag.set_running(true);
         ag.touch();
         s.bus
             .emit(sid, "turn", json!({"state":"running","task_id":task}));
         if !crate::tasks::claim_dispatch(&s.db, task).map_err(|e| (false, e.message))? {
             return Ok("cancelled".into());
         }
-        rpc.call(
-            "session/prompt",
-            json!({"sessionId":ag.acp_sid(),"prompt":blocks}),
-            6 * 3600,
-        )
-        .map(|r| {
-            r.get("stopReason")
-                .and_then(Value::as_str)
-                .unwrap_or("end_turn")
-                .to_string()
-        })
-        .map_err(|e| (true, e))
+        ag.prompt(blocks)
     })();
     let (state, reason) = match result {
         Ok(stop) if stop == "end_turn" => ("succeeded", stop),
@@ -1136,7 +1159,7 @@ pub fn agents_import(aid: &str, b: &Value) -> Result<Value, String> {
         .collect();
     s.db.exec("insert into sessions(id,project_id,acp_sid,title,model,effort,mode,created,updated,agent) values(?,?,?,?,?,?,?,?,?,?)",
         rusqlite::params![sid, pr, esid, t, "", "", def_mode(), now(), now(), aid]);
-    if let Err(e) = get_agent(&sid) {
+    if let Err(e) = get_agent(&sid, None) {
         log(&format!("import load {e}"))
     }
     crate::sess_row(&sid).ok_or("no session".into())

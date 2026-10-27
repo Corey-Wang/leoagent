@@ -1,10 +1,12 @@
 <resources>
-<!-- 阿福式: 薰衣草雾面底 + 白色悬浮卡片 + 靛紫主色 -->
-<color name="bg">#F4F4FB</color><color name="surface">#FFFFFF</color><color name="surface2">#EEEEF8</color><color name="border">#E2E3F0</color>
-<color name="text">#1D1F3A</color><color name="muted">#8A8CA6</color><color name="primary">#5B5CF0</color><color name="primaryC">#ECECFF</color>
-<color name="up">#F0443A</color><color name="down">#22B573</color><color name="strong">#F0443A</color><color name="strongC">#FFEDEC</color>
-<color name="weak">#F59E2B</color><color name="weakC">#FFF4E3</color><color name="info">#8A8CA6</color><color name="infoC">#F0F0F8</color>
-<color name="purple">#8B5CF6</color><color name="bar">#F2FFFFFF</color>
-<color name="glowA">#E3E3FF</color><color name="glowB">#F7EEFF</color><color name="primary2">#7B8CFF</color>
-<color name="md_table_stripe">#FAFAFE</color><color name="md_code_background">#F6F7FB</color>
+<!-- A 静默协作：连续阅读面与靛蓝动作 -->
+<color name="bg">#FFFFFF</color><color name="surface">#FFFFFF</color><color name="surface2">#F4F5F8</color><color name="border">#E5E8EE</color>
+<color name="text">#232A38</color><color name="muted">#626B7A</color><color name="primary">#414D9D</color><color name="primaryFill">#414D9D</color><color name="primaryC">#EDF0FA</color>
+<color name="approvalBg">#F7F8FC</color><color name="composerBg">#F3F4F7</color><color name="userBg">#F1F2F5</color>
+<color name="up">#BA3028</color><color name="down">#286649</color><color name="strong">#BA3028</color><color name="strongC">#FFF0ED</color>
+<color name="weak">#80510C</color><color name="weakC">#FFF3DD</color><color name="info">#626B7A</color><color name="infoC">#F4F5F8</color>
+<color name="purple">#6550A0</color><color name="bar">#FFFFFF</color>
+<color name="onPrimary">#FFFFFF</color><color name="strongFill">#BA3028</color>
+<color name="glowA">#FFFFFF</color><color name="glowB">#FFFFFF</color><color name="primary2">#414D9D</color>
+<color name="md_table_stripe">#F4F5F8</color><color name="md_code_background">#F4F5F8</color>
 </resources>

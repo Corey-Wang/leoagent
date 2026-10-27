@@ -16,15 +16,14 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import org.json.JSONObject
 
-/** iOS / Apple HIG 风格的原生组件: 大标题、分组圆角列表、胶囊标签、填充按钮 */
-/** 设计 Token: 字号阶梯 / 4-8pt 间距 / 圆角 / 触控尺寸 (Apple HIG) */
+/** A「静默协作」：连续阅读、靛蓝动作、就近审批。 */
 object DS {
-    // Large Title 34 · Title1 28 · Title2 22 · Title3 20 · Headline/Body 17 · Callout 16 · Subhead 15 · Footnote 13 · Caption1 12 · Caption2 11
-    val TYPE = floatArrayOf(11f, 12f, 13f, 15f, 17f, 20f, 22f, 28f, 34f)
+    // Page title 32 · section 20 · body 16–17 · metadata 12–14.
+    val TYPE = floatArrayOf(12f, 13f, 14f, 15f, 16f, 17f, 20f, 22f, 28f, 32f)
     fun snap(s: Float): Float { if (s > 34f) return s; var b = TYPE[0]; for (t in TYPE) if (kotlin.math.abs(t - s) <= kotlin.math.abs(b - s)) b = t; return b }
     const val S1 = 4; const val S2 = 8; const val S3 = 12; const val S4 = 16; const val S5 = 20; const val S6 = 24; const val S8 = 32
-    const val R_SM = 10; const val R_MD = 16; const val R_LG = 20; const val R_PILL = 99
-    const val TOUCH = 44; const val ROW = 48; const val BTN = 50
+    const val R_SM = 12; const val R_MD = 12; const val R_LG = 16; const val R_PILL = 99
+    const val TOUCH = 48; const val ROW = 56; const val BTN = 48
 }
 object UI {
     val REG: Typeface = Typeface.create("sans-serif", Typeface.NORMAL)
@@ -35,13 +34,14 @@ object UI {
     fun tierColor(c: Context, tier: String) = col(c, when (tier.lowercase()) { "strong", "exit", "manual" -> R.color.strong; "weak" -> R.color.weak; "test" -> R.color.primary; else -> R.color.info })
     fun tierBg(c: Context, tier: String) = col(c, when (tier.lowercase()) { "strong", "exit", "manual" -> R.color.strongC; "weak" -> R.color.weakC; "test" -> R.color.primaryC; else -> R.color.infoC })
     fun round(c: Context, color: Int, r: Int) = GradientDrawable().apply { cornerRadius = dp(c, r).toFloat(); setColor(color) }
-    /** 阿福式页面背景: 顶部薰衣草柔光 → 雾白 */
-    fun pageBg(c: Context) = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(col(c, R.color.glowA), col(c, R.color.glowB), col(c, R.color.bg), col(c, R.color.bg)))
-    /** 悬浮卡片: 白底 + 边缘高光描边 */
+    fun pageBg(c: Context) = ColorDrawable(col(c, R.color.bg))
     fun card(c: Context, r: Int = DS.R_MD) = GradientDrawable().apply { cornerRadius = dp(c, r).toFloat(); setColor(col(c, R.color.surface)); setStroke(maxOf(1, dp(c, 1) / 2), col(c, R.color.border)) }
-    /** 主色渐变 (靛紫 → 蓝紫) */
-    fun grad(c: Context, r: Int) = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(col(c, R.color.primary), col(c, R.color.primary2))).apply { cornerRadius = dp(c, r).toFloat() }
-    fun lift(v: View) { v.elevation = dp(v.context, 2).toFloat(); if (android.os.Build.VERSION.SDK_INT >= 28) { v.outlineSpotShadowColor = 0x405B5CF0; v.outlineAmbientShadowColor = 0x205B5CF0 } }
+    fun outline(c: Context, bg: Int = R.color.surface, r: Int = DS.R_SM) = GradientDrawable().apply {
+        cornerRadius = dp(c, r).toFloat(); setColor(col(c, bg)); setStroke(maxOf(1, dp(c, 1)), col(c, R.color.border))
+    }
+    // Keep this helper for existing call sites; the selected direction uses a solid fill.
+    fun grad(c: Context, r: Int) = round(c, col(c, R.color.primaryFill), r)
+    fun lift(v: View) { v.elevation = 0f }
     fun ripple(c: Context, bg: Int, r: Int) = RippleDrawable(ColorStateList.valueOf(0x22808080), round(c, bg, r), round(c, Color.WHITE, r))
     /** Keyboard focus feedback. Non-editable actions must not take touch focus: it consumes the first tap. */
     fun focusForeground(c: Context, r: Int) = StateListDrawable().apply {
@@ -64,22 +64,22 @@ object UI {
 
     /** 大标题 + 可选副标题 */
     fun largeTitle(c: Context, parent: LinearLayout, title: String, sub: String? = null) {
-        parent.addView(text(c, title, 34f, R.color.text, true).apply { setPadding(dp(c, DS.S5), dp(c, DS.S3), dp(c, DS.S5), 0) })
+        parent.addView(text(c, title, 32f, R.color.text, true).apply { setPadding(dp(c, DS.S5), dp(c, DS.S3), dp(c, DS.S5), 0) })
         if (sub != null) parent.addView(text(c, sub, 13f, R.color.muted).apply { setPadding(dp(c, DS.S5), dp(c, DS.S1), dp(c, DS.S5), 0) })
     }
     fun header(c: Context, parent: LinearLayout, s: String, right: String? = null) {
         val t = text(c, s, 13f, R.color.muted, false).apply { letterSpacing = 0.02f }
-        val row = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.BOTTOM; setPadding(dp(c, DS.S8), dp(c, DS.S6), dp(c, DS.S8), dp(c, DS.S2)) }
+        val row = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.BOTTOM; setPadding(dp(c, DS.S5), dp(c, DS.S6), dp(c, DS.S5), dp(c, DS.S2)) }
         row.addView(t, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         if (right != null) row.addView(text(c, right, 13f, R.color.muted))
         parent.addView(row)
     }
-    fun footer(c: Context, parent: LinearLayout, s: String) = parent.addView(text(c, s, 13f, R.color.muted).apply { setPadding(dp(c, DS.S8), dp(c, DS.S2), dp(c, DS.S8), 0) })
+    fun footer(c: Context, parent: LinearLayout, s: String) = parent.addView(text(c, s, 13f, R.color.muted).apply { setPadding(dp(c, DS.S5), dp(c, DS.S2), dp(c, DS.S5), 0) })
 
-    /** 分组(inset grouped)容器 */
+    /** 平面分组列表，行间使用细分隔线。 */
     fun group(c: Context, parent: LinearLayout, header: String? = null, right: String? = null): LinearLayout {
         if (header != null) header(c, parent, header, right)
-        val g = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; background = card(c); clipToOutline = true; lift(this) }
+        val g = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(col(c, R.color.surface)); clipToOutline = true }
         parent.addView(g, lp(c, t = if (header == null) 12 else 0)); return g
     }
     /** 卡片 = 带内边距的分组 */
@@ -94,12 +94,22 @@ object UI {
     fun row(c: Context, g: LinearLayout, title: CharSequence, value: CharSequence? = null, valueColor: Int = R.color.muted,
             sub: CharSequence? = null, titleColor: Int = R.color.text, onClick: (() -> Unit)? = null): LinearLayout {
         sep(c, g)
-        val r = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(c, DS.ROW); setPadding(dp(c, DS.S4), dp(c, DS.S3), dp(c, DS.S4), dp(c, DS.S3)) }
+        val rightText = value?.let { mono(c, it, 14f, valueColor, false).apply {
+            gravity = Gravity.END; setPadding(dp(c, DS.S3), 0, 0, 0)
+            maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END
+        } }
+        val r = object : LinearLayout(c) {
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                // Use this row's available width, including drawers and narrow windows.
+                rightText?.maxWidth = ((View.MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight) * 0.42f).toInt().coerceAtLeast(0)
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            }
+        }.apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(c, DS.ROW); setPadding(dp(c, DS.S4), dp(c, DS.S3), dp(c, DS.S4), dp(c, DS.S3)) }
         val left = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
-        left.addView(text(c, title, 17f, titleColor))
+        left.addView(text(c, title, 16f, titleColor))
         if (sub != null) left.addView(text(c, sub, 13f, R.color.muted).apply { setPadding(0, dp(c, 2), 0, 0) })
         r.addView(left, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-        if (value != null) r.addView(mono(c, value, 17f, valueColor, false).apply { gravity = Gravity.END; setPadding(dp(c, DS.S3), 0, 0, 0); maxWidth = dp(c, 220); maxLines = 2 })
+        if (rightText != null) r.addView(rightText)
         if (onClick != null) {
             r.addView(android.widget.ImageView(c).apply { setImageResource(R.drawable.ms_chevron_right); rotation = 0f; imageTintList = ColorStateList.valueOf(col(c, R.color.muted)); alpha = 0.6f }, LinearLayout.LayoutParams(dp(c, 18), dp(c, 18)).apply { leftMargin = dp(c, DS.S2) })
             r.background = RippleDrawable(ColorStateList.valueOf(0x22808080), null, null)
@@ -110,7 +120,7 @@ object UI {
         }
         g.addView(r); return r
     }
-    /** 按钮行: 蓝色文字, iOS 列表内操作 */
+    /** 列表内操作：蓝色文字与完整行触控。 */
     fun action(c: Context, g: LinearLayout, title: String, color: Int = R.color.primary, onClick: () -> Unit) =
         row(c, g, title, titleColor = color, onClick = null).apply {
             background = RippleDrawable(ColorStateList.valueOf(0x22808080), null, null)
@@ -130,15 +140,18 @@ object UI {
     }
     fun filledButton(c: Context, s: String, bg: Int = R.color.primary, fg: Int = android.R.color.white, onClick: () -> Unit) = TextView(c).apply {
         text = s; textSize = 17f; typeface = MED; gravity = Gravity.CENTER; setTextColor(col(c, fg)); minHeight = dp(c, DS.BTN)
-        background = if (bg == R.color.primary) RippleDrawable(ColorStateList.valueOf(0x33FFFFFF), grad(c, DS.R_PILL), null) else ripple(c, col(c, bg), DS.R_PILL)
-        foreground = focusForeground(c, DS.R_PILL)
+        background = if (bg == R.color.primary) RippleDrawable(ColorStateList.valueOf(0x33FFFFFF), grad(c, DS.R_SM), null) else ripple(c, col(c, bg), DS.R_SM)
+        foreground = focusForeground(c, DS.R_SM)
         isClickable = true
         isFocusable = true
         isFocusableInTouchMode = false
         contentDescription = s
         setOnClickListener { onClick() }
     }
-    /** Material Symbols Rounded 图标按钮 (44dp 触控区) */
+    fun secondaryButton(c: Context, s: String, onClick: () -> Unit) = filledButton(c, s, R.color.surface, R.color.text, onClick).apply {
+        background = RippleDrawable(ColorStateList.valueOf(0x22808080), outline(c), null)
+    }
+    /** Material Symbols Rounded 图标按钮 (48dp 触控区) */
     fun icon(c: Context, res: Int, tint: Int = R.color.text, size: Int = 24) = android.widget.ImageView(c).apply {
         setImageResource(res); imageTintList = ColorStateList.valueOf(col(c, tint)); scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
         val p = dp(c, (DS.TOUCH - size) / 2); setPadding(p, p, p, p)

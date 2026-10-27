@@ -15,14 +15,24 @@ class SecurityInstrumentation : Instrumentation() {
         try {
             val c = targetContext
             check(c.packageName == "io.leoagent.app.verification") { "Use -Pleoagent.verification, never the regular app" }
+            if (args.getString("scenario") in setOf("stream-light", "stream-dark")) {
+                StreamingChecks(this).run(args.getString("scenario") == "stream-dark")
+                finish(-1, Bundle().apply { putString("stream", "PASS: ${args.getString("scenario")} optimistic echo, stable history/viewport, full chunks, reconnect replay and terminal state\n") })
+                return
+            }
             if (args.getString("scenario") in setOf("toolbar-touch", "toolbar-touch-reproduce")) {
                 ToolbarTouchChecks(this).run(args.getString("scenario") == "toolbar-touch-reproduce")
                 finish(-1, Bundle().apply { putString("stream", "PASS: ${args.getString("scenario")} touchscreen first tap and keyboard behavior\n") })
                 return
             }
+            if (args.getString("scenario") in setOf("redesign-light", "redesign-dark")) {
+                RedesignChecks(this).run(args.getString("scenario") == "redesign-dark")
+                finish(-1, Bundle().apply { putString("stream", "PASS: ${args.getString("scenario")} real native send, allow/reject, stale approval cleanup, 320dp row, contrast and screenshots\n") })
+                return
+            }
             if (args.getString("scenario") in setOf("notifications", "notifications-denied")) {
                 NotificationChecks(this).run(args.getString("scenario") == "notifications-denied")
-                finish(-1, Bundle().apply { putString("stream", "PASS: ${args.getString("scenario")} native inbox, background service, delivery/read cursors and notification behavior\n") })
+                finish(-1, Bundle().apply { putString("stream", "PASS: ${args.getString("scenario")} background service, delivery cursor, settings navigation and notification behavior\n") })
                 return
             }
             if (args.getString("scenario") == "markdown-theme") {

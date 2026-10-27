@@ -66,13 +66,13 @@ class FileActivity : AppCompatActivity() {
         path = intent.getStringExtra("path")?.takeIf { it.isNotBlank() }; line = intent.getIntExtra("line", 0)
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(col(R.color.bg)) }
         bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(4), dp(6), dp(8), dp(6)) }
-        bar.addView(btn("‹", 30f) { onBackPressedCompat() }, LinearLayout.LayoutParams(dp(44), dp(44)))
+        bar.addView(btn("‹", 30f) { onBackPressedCompat() }, LinearLayout.LayoutParams(dp(48), dp(48)))
         val tcol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
         titleTv = UI.text(this, "文件", 16.5f, R.color.text, true).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.MIDDLE; gravity = Gravity.CENTER }
         subTv = UI.text(this, "", 11.5f, R.color.muted).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.START; gravity = Gravity.CENTER }
         tcol.addView(titleTv); tcol.addView(subTv)
         bar.addView(tcol, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-        right = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; minimumWidth = dp(44) }
+        right = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; minimumWidth = dp(48) }
         bar.addView(right)
         root.addView(bar)
         root.addView(View(this).apply { setBackgroundColor(col(R.color.border)) }, LinearLayout.LayoutParams(MATCH_PARENT, 1))
@@ -85,6 +85,8 @@ class FileActivity : AppCompatActivity() {
     private fun btn(s: String, size: Float = 20f, onClick: () -> Unit) = UI.text(this, s, size, R.color.primary).apply {
         gravity = Gravity.CENTER; setPadding(dp(8), 0, dp(8), 0); minWidth = dp(DS.TOUCH); minHeight = dp(DS.TOUCH)
         GLYPH[s]?.let { UI.glyph(context, this, it, col(R.color.primary), UI.ripple(context, Color.TRANSPARENT, 22), if (s == "‹") 28 else 24) } ?: run { background = UI.ripple(context, Color.TRANSPARENT, 20) }
+        contentDescription = when (s) { "‹" -> "返回"; "⋯" -> "更多文件操作"; "⟳" -> "刷新文件"; "⤢" -> "切换全屏"; else -> s }
+        isFocusable = true; isFocusableInTouchMode = false; foreground = UI.focusForeground(context, DS.R_SM)
         setOnClickListener { onClick() } }
     private fun setRight(vararg v: View) { right.removeAllViews(); v.forEach { right.addView(it, LinearLayout.LayoutParams(if ((it as? TextView)?.text.isNullOrEmpty()) dp(DS.TOUCH) else WRAP_CONTENT, dp(DS.TOUCH))) } }
 
@@ -309,8 +311,8 @@ class FileActivity : AppCompatActivity() {
         ls.addView(UI.text(this, icon(i.optString("kind"), i.optString("name")), 56f).apply { gravity = Gravity.CENTER })
         ls.addView(UI.text(this, i.optString("name"), 18f, R.color.text, true).apply { gravity = Gravity.CENTER; setPadding(dp(24), dp(12), dp(24), dp(4)) })
         ls.addView(UI.text(this, "${size(i.optLong("size"))} · ${i.optString("mime")}\n修改于 ${ago(i.optLong("mtime"))}", 13.5f, R.color.muted).apply { gravity = Gravity.CENTER; setLineSpacing(0f, 1.3f) })
-        ls.addView(UI.filledButton(this, "分享 / 用其它应用打开") { share() }, LinearLayout.LayoutParams(dp(240), dp(44)).apply { topMargin = dp(28) })
-        ls.addView(UI.filledButton(this, "下载到手机", R.color.surface2, R.color.primary) { saveToDownloads() }, LinearLayout.LayoutParams(dp(240), dp(44)).apply { topMargin = dp(10) })
+        ls.addView(UI.filledButton(this, "分享 / 用其它应用打开") { share() }, LinearLayout.LayoutParams(dp(240), dp(48)).apply { topMargin = dp(28) })
+        ls.addView(UI.filledButton(this, "下载到手机", R.color.surface2, R.color.primary) { saveToDownloads() }, LinearLayout.LayoutParams(dp(240), dp(48)).apply { topMargin = dp(10) })
         ls.addView(UI.text(this, "以文本方式查看", 14f, R.color.primary).apply { gravity = Gravity.CENTER; setPadding(0, dp(18), 0, 0); setOnClickListener { showCode() } })
         body.addView(ScrollView(this).apply { addView(ls) }, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
     }

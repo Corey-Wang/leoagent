@@ -30,6 +30,7 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/leoagent-tests"
           "$RUNNER_TEMP/leoagent-tests/bin/python" -m pip install -r tests/requirements.txt
           LEOAGENT_CONTRACTS=1 "$RUNNER_TEMP/leoagent-tests/bin/python" tests/integration.py
+          "$RUNNER_TEMP/leoagent-tests/bin/python" tests/initialize_integration.py
           LEOAGENT_CONTRACTS=1 "$RUNNER_TEMP/leoagent-tests/bin/python" tests/security.py
           "$RUNNER_TEMP/leoagent-tests/bin/python" tests/notifications.py
           git diff --check
@@ -38,6 +39,11 @@ jobs:
         run: |
           bash deploy/package-release.sh "$RUNNER_TEMP/leoagent-dist"
           python3 tests/install_package.py "$RUNNER_TEMP/leoagent-dist/leoagent-server-darwin-$(uname -m).tar.gz"
+      - name: Isolated desktop continuation and durable task lifecycle
+        run: |
+          cargo +1.92.0 test --locked --all-features --manifest-path server/Cargo.toml
+          cargo +1.92.0 build --locked --features desktop-sync --manifest-path server/Cargo.toml
+          python3 tests/desktop_integration.py
   android:
     runs-on: ubuntu-latest
     steps:

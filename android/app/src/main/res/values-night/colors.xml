@@ -1,9 +1,11 @@
 <resources>
-<color name="bg">#0E0E1A</color><color name="surface">#1A1A2B</color><color name="surface2">#25253A</color><color name="border">#30304A</color>
-<color name="text">#F2F2FA</color><color name="muted">#8E90AC</color><color name="primary">#8486FF</color><color name="primaryC">#262650</color>
-<color name="up">#FF5A4F</color><color name="down">#2FD08A</color><color name="strong">#FF5A4F</color><color name="strongC">#3A1C1E</color>
-<color name="weak">#FFAE42</color><color name="weakC">#3A2A14</color><color name="info">#8E90AC</color><color name="infoC">#25253A</color>
-<color name="purple">#A78BFA</color><color name="bar">#F0141424</color>
-<color name="glowA">#1C1C3C</color><color name="glowB">#1A1430</color><color name="primary2">#6D7BFF</color>
-<color name="md_table_stripe">#202034</color><color name="md_code_background">#202034</color>
+<color name="bg">#141820</color><color name="surface">#191F29</color><color name="surface2">#242C38</color><color name="border">#35404F</color>
+<color name="text">#EDF1F7</color><color name="muted">#ADB8C8</color><color name="primary">#B0B9FF</color><color name="primaryFill">#414D9D</color><color name="primaryC">#2A304B</color>
+<color name="approvalBg">#202437</color><color name="composerBg">#242936</color><color name="userBg">#292F3D</color>
+<color name="up">#FFAAA1</color><color name="down">#94D4B2</color><color name="strong">#FFAAA1</color><color name="strongC">#402824</color>
+<color name="weak">#EDC482</color><color name="weakC">#352C1F</color><color name="info">#ADB8C8</color><color name="infoC">#242C38</color>
+<color name="purple">#C4B5FD</color><color name="bar">#141820</color>
+<color name="onPrimary">#141820</color><color name="strongFill">#BA3028</color>
+<color name="glowA">#141820</color><color name="glowB">#141820</color><color name="primary2">#414D9D</color>
+<color name="md_table_stripe">#242C38</color><color name="md_code_background">#242C38</color>
 </resources>

@@ -1,0 +1,1 @@
+published v0.1.7 (8) -> $HOME/.local/share/leoagent/app

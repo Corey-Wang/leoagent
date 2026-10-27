@@ -1,0 +1,30 @@
+{
+  "publication_status": "published_after_explicit_user_authorization",
+  "authorization": "用户本轮原话：发布",
+  "published_at_utc": "2026-10-26T08:25:07.762752+00:00",
+  "versionName": "0.1.7",
+  "versionCode": 8,
+  "backup_path": "$HOME/.local/share/leoagent/backups/android-0.1.6-to-0.1.7-20261026T082452651850Z",
+  "previous_versionName": "0.1.6",
+  "previous_versionCode": 7,
+  "previous_apk_sha256": "47adb864b754dcaaabb373c41c5bedbc86ab6a8dd7f9553ae1dfddd93514ef93",
+  "download_sha256": "f32cfec8c5f7dad883d12ed4c77e149992f869a0a00e9fe20ccaf494e7b531af",
+  "download_bytes": 6086651,
+  "download_content_type": "application/vnd.android.package-archive",
+  "version_api": {
+    "versionCode": 8,
+    "versionName": "0.1.7",
+    "notes": "A 静默协作改版：两行输入、固定审批与拒绝确认、项目抽屉、按文件查看项目改动；保留浅深色、语音、图片、画中画、任务恢复与系统通知。",
+    "url": "/api/app/apk"
+  },
+  "configuration_unchanged": true,
+  "pairing_credentials_unchanged": true,
+  "server_generation_unchanged": true,
+  "data_epoch_unchanged": true,
+  "same_certificate_as_current_update": true,
+  "certificate_sha256": "35b321a0f8eb9eaa4127c5d552293cce5785b55598e4261b68cf146d5379d60e",
+  "verification_scope": "existing local update service via loopback; full authenticated APK download",
+  "physical_device_installed": false,
+  "github_release_created": false,
+  "git_commit_or_push": false
+}

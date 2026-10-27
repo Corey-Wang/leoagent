@@ -1,0 +1,25 @@
+{
+  "candidate": {
+    "packageName": "io.leoagent.app",
+    "versionCode": 8,
+    "versionName": "0.1.7",
+    "certificateSha256": "35b321a0f8eb9eaa4127c5d552293cce5785b55598e4261b68cf146d5379d60e",
+    "debuggable": false,
+    "sha256": "f32cfec8c5f7dad883d12ed4c77e149992f869a0a00e9fe20ccaf494e7b531af",
+    "bytes": 6086651
+  },
+  "installedChannelBaseline": {
+    "packageName": "io.leoagent.app",
+    "versionCode": 7,
+    "versionName": "0.1.6",
+    "certificateSha256": "35b321a0f8eb9eaa4127c5d552293cce5785b55598e4261b68cf146d5379d60e",
+    "debuggable": false,
+    "sha256": "47adb864b754dcaaabb373c41c5bedbc86ab6a8dd7f9553ae1dfddd93514ef93",
+    "bytes": 6081703
+  },
+  "sameSigningIdentity": true,
+  "versionCodeIncreased": true,
+  "channelUnchanged": true,
+  "verificationStage": "candidate preparation before publication",
+  "publicationEvidence": "publication.json"
+}

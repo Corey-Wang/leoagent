@@ -1,0 +1,30 @@
+{
+  "publication_status": "published_after_explicit_user_authorization",
+  "authorization": "用户本轮原话：发布",
+  "published_at_utc": "2026-10-27T00:49:59.443506+00:00",
+  "versionName": "0.1.8",
+  "versionCode": 9,
+  "backup_path": "$HOME/.local/share/leoagent/backups/android-0.1.7-to-0.1.8-20261027T004940389464Z",
+  "previous_versionName": "0.1.7",
+  "previous_versionCode": 8,
+  "previous_apk_sha256": "f32cfec8c5f7dad883d12ed4c77e149992f869a0a00e9fe20ccaf494e7b531af",
+  "download_sha256": "335d2a917e85e175f15438a4f2117f17537fba8bb1acc3e9900914f0e540c187",
+  "download_bytes": 6086531,
+  "download_content_type": "application/vnd.android.package-archive",
+  "version_api": {
+    "versionCode": 9,
+    "versionName": "0.1.8",
+    "notes": "修复发送消息后聊天区闪动；执行状态移入回复区域；流式文字及时显示；断线恢复补齐输出并避免重复消息。",
+    "url": "/api/app/apk"
+  },
+  "configuration_unchanged": true,
+  "pairing_credentials_unchanged": true,
+  "server_generation_unchanged": true,
+  "data_epoch_unchanged": true,
+  "same_certificate_as_previous_update": true,
+  "certificate_sha256": "35b321a0f8eb9eaa4127c5d552293cce5785b55598e4261b68cf146d5379d60e",
+  "verification_scope": "existing local update service via loopback; full authenticated APK download and downloaded signature verification",
+  "physical_device_installed": false,
+  "github_release_created": false,
+  "git_commit_or_push": false
+}

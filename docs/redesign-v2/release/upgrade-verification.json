@@ -1,0 +1,201 @@
+{
+  "scope": "actual signed release APK upgrade; new task-created emulator only",
+  "emulator": "emulator-5564",
+  "oldVersion": "0.1.6 (7)",
+  "newVersion": "0.1.7 (8)",
+  "server": "loopback HTTP fixture, no Agent or production service",
+  "result": "passed",
+  "checks": {
+    "installerAcceptedSameSignatureUpgrade": true,
+    "applicationUidPreserved": true,
+    "encryptedCredentialReusedByNewRelease": true,
+    "serverAddressPreserved": true,
+    "selectedProjectPreserved": true,
+    "newConversationApprovalPreferencePreserved": true,
+    "newComposerAndSettingsVisible": true
+  },
+  "screenshots": [
+    "upgrade-before-settings.png",
+    "upgrade-after-conversation.png",
+    "upgrade-after-settings.png",
+    "upgrade-after-connection.png"
+  ],
+  "requests": [
+    {
+      "phase": "before-upgrade",
+      "path": "/api/threads",
+      "credentialMatched": true
+    },
+    {
+      "phase": "before-upgrade",
+      "path": "/api/projects",
+      "credentialMatched": true
+    },
+    {
+      "phase": "before-upgrade",
+      "path": "/api/models",
+      "credentialMatched": true
+    },
+    {
+      "phase": "before-upgrade",
+      "path": "/api/sessions",
+      "credentialMatched": true
+    },
+    {
+      "phase": "before-upgrade",
+      "path": "/api/agents",
+      "credentialMatched": true
+    },
+    {
+      "phase": "before-upgrade",
+      "path": "/api/app/version",
+      "credentialMatched": true
+    },
+    {
+      "phase": "before-upgrade",
+      "path": "/api/agents",
+      "credentialMatched": true
+    },
+    {
+      "phase": "before-upgrade",
+      "path": "/api/notify",
+      "credentialMatched": true
+    },
+    {
+      "phase": "before-upgrade",
+      "path": "/api/threads",
+      "credentialMatched": true
+    },
+    {
+      "phase": "before-upgrade",
+      "path": "/api/sessions",
+      "credentialMatched": true
+    },
+    {
+      "phase": "before-upgrade",
+      "path": "/api/threads",
+      "credentialMatched": true
+    },
+    {
+      "phase": "before-upgrade",
+      "path": "/api/sessions",
+      "credentialMatched": true
+    },
+    {
+      "phase": "before-upgrade",
+      "path": "/api/threads",
+      "credentialMatched": true
+    },
+    {
+      "phase": "before-upgrade",
+      "path": "/api/sessions",
+      "credentialMatched": true
+    },
+    {
+      "phase": "before-upgrade",
+      "path": "/api/health",
+      "credentialMatched": true
+    },
+    {
+      "phase": "before-upgrade",
+      "path": "/api/settings",
+      "credentialMatched": true
+    },
+    {
+      "phase": "before-upgrade",
+      "path": "/api/health",
+      "credentialMatched": true
+    },
+    {
+      "phase": "before-upgrade",
+      "path": "/api/settings",
+      "credentialMatched": true
+    },
+    {
+      "phase": "after-upgrade",
+      "path": "/api/threads",
+      "credentialMatched": true
+    },
+    {
+      "phase": "after-upgrade",
+      "path": "/api/sessions",
+      "credentialMatched": true
+    },
+    {
+      "phase": "after-upgrade",
+      "path": "/api/projects",
+      "credentialMatched": true
+    },
+    {
+      "phase": "after-upgrade",
+      "path": "/api/models",
+      "credentialMatched": true
+    },
+    {
+      "phase": "after-upgrade",
+      "path": "/api/agents",
+      "credentialMatched": true
+    },
+    {
+      "phase": "after-upgrade",
+      "path": "/api/app/version",
+      "credentialMatched": true
+    },
+    {
+      "phase": "after-upgrade",
+      "path": "/api/agents",
+      "credentialMatched": true
+    },
+    {
+      "phase": "after-upgrade",
+      "path": "/api/notify",
+      "credentialMatched": true
+    },
+    {
+      "phase": "after-upgrade",
+      "path": "/api/threads",
+      "credentialMatched": true
+    },
+    {
+      "phase": "after-upgrade",
+      "path": "/api/sessions",
+      "credentialMatched": true
+    },
+    {
+      "phase": "after-upgrade",
+      "path": "/api/threads",
+      "credentialMatched": true
+    },
+    {
+      "phase": "after-upgrade",
+      "path": "/api/sessions",
+      "credentialMatched": true
+    },
+    {
+      "phase": "after-upgrade",
+      "path": "/api/health",
+      "credentialMatched": true
+    },
+    {
+      "phase": "after-upgrade",
+      "path": "/api/settings",
+      "credentialMatched": true
+    }
+  ],
+  "packageRemoved": true,
+  "adbReverseRemoved": true,
+  "httpFixtureStopped": true,
+  "fixtureProjectSetup": {
+    "projectCount": 2,
+    "defaultProjectId": 1,
+    "selectedProjectId": 2
+  },
+  "cleanup": {
+    "packageRemoved": true,
+    "adbReverseRemoved": true,
+    "httpFixtureStopped": true,
+    "emulator5564Stopped": true,
+    "createdAvdRemoved": true,
+    "existingEmulator5554Untouched": true
+  }
+}

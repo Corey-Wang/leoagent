@@ -1,0 +1,37 @@
+[
+  {
+    "path": "$WORKSPACE/docs/redesign-v2/design-demos/dir-1.html",
+    "red": [],
+    "yellow": [
+      "模板装饰：等宽小字标签 7 处",
+      "标题字体是 -apple-system（UI 小字体当 display）"
+    ],
+    "families": [
+      "卡片套件·同一圆角＋同一阴影重复 4 次"
+    ],
+    "look": "浅·有色底 #E9ECF1，无衬线标题（-apple-system），正文 -apple-system"
+  },
+  {
+    "path": "$WORKSPACE/docs/redesign-v2/design-demos/dir-2.html",
+    "red": [],
+    "yellow": [
+      "模板装饰：等宽小字标签 5 处",
+      "标题字体是 -apple-system（UI 小字体当 display）"
+    ],
+    "families": [
+      "卡片套件·同一圆角＋同一阴影重复 4 次"
+    ],
+    "look": "深·近黑底 #101419，无衬线标题（-apple-system），正文 -apple-system"
+  },
+  {
+    "path": "$WORKSPACE/docs/redesign-v2/design-demos/dir-3.html",
+    "red": [],
+    "yellow": [
+      "标题字体是 -apple-system（UI 小字体当 display）"
+    ],
+    "families": [
+      "卡片套件·同一圆角＋同一阴影重复 4 次"
+    ],
+    "look": "浅·有色底 #E5ECFF，无衬线标题（-apple-system），正文 -apple-system"
+  }
+]

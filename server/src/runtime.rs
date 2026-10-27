@@ -35,6 +35,19 @@ pub fn no_desk() -> bool {
 
 // ───────── JSON-RPC over stdio ─────────
 type Handler = Box<dyn Fn(Value) + Send + Sync>;
+#[derive(Debug)]
+pub enum RpcError {
+    Timeout { method: String, seconds: u64 },
+    Failed(String),
+}
+impl std::fmt::Display for RpcError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Timeout { method, seconds } => write!(f, "{method}: 等待 Agent 响应超时（{seconds} 秒）"),
+            Self::Failed(message) => f.write_str(message),
+        }
+    }
+}
 static RPCS: OnceLock<Mutex<Vec<Weak<Rpc>>>> = OnceLock::new();
 static STOPPING: AtomicBool = AtomicBool::new(false);
 pub fn stopping() -> bool {
@@ -100,6 +113,9 @@ impl Rpc {
         let stdin = child.stdin.take().unwrap();
         let stdout = child.stdout.take().unwrap();
         let stderr = child.stderr.take();
+        if let Some(tag) = &log_tag {
+            log(&format!("rpc spawn [{tag}] pid={}", child.id()));
+        }
         let r = Arc::new(Self {
             child: Mutex::new(child),
             stdin: Mutex::new(stdin),
@@ -193,27 +209,35 @@ impl Rpc {
         self.send(&json!({"jsonrpc":"2.0","method":method,"params":params}))
     }
     pub fn call(&self, method: &str, params: Value, timeout: u64) -> Result<Value, String> {
+        self.call_detailed(method, params, timeout).map_err(|e| e.to_string())
+    }
+    pub fn call_detailed(&self, method: &str, params: Value, timeout: u64) -> Result<Value, RpcError> {
         let i = self.n.fetch_add(1, Ordering::SeqCst) + 1;
         let (tx, rx) = mpsc::channel();
         self.wait.lock().insert(i, tx);
         if self.dead.load(Ordering::SeqCst) {
             self.wait.lock().remove(&i);
-            return Err(format!("{method}: {}", self.exit_msg));
+            return Err(RpcError::Failed(format!("{method}: {}", self.exit_msg)));
         }
-        self.send(&json!({"jsonrpc":"2.0","id":i,"method":method,"params":params}));
+        if let Err(e) = self.send_checked(&json!({"jsonrpc":"2.0","id":i,"method":method,"params":params})) {
+            self.wait.lock().remove(&i);
+            return Err(RpcError::Failed(format!("{method}: pipe write failed: {e}")));
+        }
         match rx.recv_timeout(Duration::from_secs(timeout)) {
-            Err(_) => {
+            Err(mpsc::RecvTimeoutError::Timeout) => {
                 self.wait.lock().remove(&i);
-                Err(method.to_string())
+                log(&format!("rpc timeout method={method} pid={} seconds={timeout} alive={}", self.pid(), self.alive()));
+                Err(RpcError::Timeout { method: method.into(), seconds: timeout })
             }
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(RpcError::Failed(format!("{method}: response channel disconnected"))),
             Ok(r) => {
                 if let Some(e) = r.get("error") {
-                    return Err(format!(
+                    return Err(RpcError::Failed(format!(
                         "{method}: {}",
                         e.get("message")
                             .map(|m| m.as_str().map(|s| s.to_string()).unwrap_or(m.to_string()))
                             .unwrap_or("None".into())
-                    ));
+                    )));
                 }
                 Ok(r.get("result").cloned().unwrap_or(Value::Null))
             }
@@ -374,6 +398,19 @@ pub trait AgentLike: Send + Sync {
         skip: bool,
     ) -> Result<(), String>;
     fn cancel(&self);
+    /// Wait for this prompt's terminal result. The error flag means dispatch may
+    /// have happened; callers must retain the project claim for an unknown result.
+    fn prompt(&self, blocks: &[Value]) -> Result<String, (bool, String)> {
+        let rpc = self.rpc().ok_or_else(|| (false, "当前执行后端不支持发送消息".into()))?;
+        self.set_running(true);
+        rpc.call(
+            "session/prompt",
+            json!({"sessionId": self.acp_sid(), "prompt": blocks}),
+            6 * 3600,
+        )
+        .map(|r| r["stopReason"].as_str().unwrap_or("end_turn").to_string())
+        .map_err(|e| (true, e))
+    }
     fn cancel_perms(&self) {
         for r in self.perm_ids() {
             self.answer_perm(&r, None);
